@@ -13,11 +13,14 @@ namespace Rebus.IntegrationTesting.Transport
     {
         private static int _nextId = 1;
 
-        public int Id { get; }
-        public DateTimeOffset VisibleAfter { get; }
-        public TransportMessage TransportMessage { get; }
-
         private volatile IntegrationTestingTransaction _transaction;
+        private DateTimeOffset _visibleAfter;
+
+        public int Id { get; }
+
+        public DateTimeOffset VisibleAfter => _visibleAfter;
+
+        public TransportMessage TransportMessage { get; }
 
         public IntegrationTestingTransaction Transaction
         {
@@ -29,9 +32,14 @@ namespace Rebus.IntegrationTesting.Transport
         {
             Id = Interlocked.Increment(ref _nextId);
             TransportMessage = transportMessage?.Clone() ?? throw new ArgumentNullException(nameof(transportMessage));
-            VisibleAfter = TransportMessage.Headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilHeader)
+            _visibleAfter = TransportMessage.Headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilHeader)
                 ? deferredUntilHeader.ToDateTimeOffset()
                 : RebusTime.Now;
+        }
+
+        public void DecreaseDeferral(TimeSpan timeSpan)
+        {
+            _visibleAfter -= timeSpan;
         }
 
         public override string ToString()

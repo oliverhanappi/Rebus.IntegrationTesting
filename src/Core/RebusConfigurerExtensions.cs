@@ -15,19 +15,28 @@ namespace Rebus.IntegrationTesting
     public static class RebusConfigurerExtensions
     {
         public static RebusConfigurer ConfigureForIntegrationTesting([NotNull] this RebusConfigurer rebusConfigurer,
-            [CanBeNull] IntegrationTestingOptions integrationTestingOptions = null)
+            [CanBeNull] Action<IntegrationTestingOptionsBuilder> configure = null)
         {
             if (rebusConfigurer == null) throw new ArgumentNullException(nameof(rebusConfigurer));
 
-            integrationTestingOptions = integrationTestingOptions ?? new IntegrationTestingOptions();
+            var optionsBuilder = new IntegrationTestingOptionsBuilder();
+            configure?.Invoke(optionsBuilder);
+            
+            var integrationTestingOptions = optionsBuilder.Build();
 
             return rebusConfigurer
                 .Options(o => o.Register(_ => integrationTestingOptions))
-                .Options(o => o.Register(_ => new IntegrationTestingNetwork()))
+                .Options(o => o.Register(CreateNetwork))
                 .Options(o => o.SetNumberOfWorkers(0))
                 .Options(o => o.Decorate(CreateBusDecorator))
                 .Transport(t => t.Register(CreateTransport))
                 .Subscriptions(s => s.Register(CreateSubscriptionStorage));
+        }
+
+        private static IntegrationTestingNetwork CreateNetwork(IResolutionContext resolutionContext)
+        {
+            var options = resolutionContext.Get<IntegrationTestingOptions>();
+            return new IntegrationTestingNetwork(options);
         }
 
         private static ITransport CreateTransport(IResolutionContext resolutionContext)

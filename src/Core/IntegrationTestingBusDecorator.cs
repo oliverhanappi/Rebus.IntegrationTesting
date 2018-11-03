@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
@@ -16,7 +17,7 @@ using Rebus.Transport;
 
 namespace Rebus.IntegrationTesting
 {
-    public class IntegrationTestingBusDecorator : IBus, IAdvancedApi, IWorkersApi, IIntegrationTestingBus
+    public class IntegrationTestingBusDecorator : IIntegrationTestingBus, IAdvancedApi, ISyncBus, IWorkersApi 
     {
         private readonly IBus _inner;
         private readonly IntegrationTestingOptions _integrationTestingOptions;
@@ -30,9 +31,9 @@ namespace Rebus.IntegrationTesting
         IRoutingApi IAdvancedApi.Routing => _inner.Advanced.Routing;
         ITransportMessageApi IAdvancedApi.TransportMessage => _inner.Advanced.TransportMessage;
         IDataBus IAdvancedApi.DataBus => _inner.Advanced.DataBus;
-        ISyncBus IAdvancedApi.SyncBus => _inner.Advanced.SyncBus;
-
+        ISyncBus IAdvancedApi.SyncBus => this;
         IWorkersApi IAdvancedApi.Workers => this;
+        
         int IWorkersApi.Count => _inner.Advanced.Workers.Count;
 
         public IntegrationTestingBusDecorator([NotNull] IBus inner, [NotNull] IntegrationTestingNetwork network,
@@ -50,6 +51,8 @@ namespace Rebus.IntegrationTesting
         {
             try
             {
+                _network.ResumeReceiving();
+                
                 using (var maxProcessingTime = new CancellationTokenSource(_integrationTestingOptions.MaxProcessingTime))
                 using (var cts = CancellationTokenSource.CreateLinkedTokenSource(maxProcessingTime.Token, cancellationToken))
                 {
@@ -86,29 +89,27 @@ namespace Rebus.IntegrationTesting
             }
         }
 
-        public Task<IReadOnlyList<Message>> GetPendingMessages()
+        public void DecreaseDeferral(TimeSpan timeSpan)
+        {
+            _network.DecreaseDeferral(_integrationTestingOptions.InputQueueName, timeSpan);
+        }
+
+        public IReadOnlyList<Message> GetPendingMessages()
             => GetMessages(_integrationTestingOptions.InputQueueName);
 
-        public Task<IReadOnlyList<Message>> GetPublishedMessages()
+        public IReadOnlyList<Message> GetPublishedMessages()
             => GetMessages(_integrationTestingOptions.SubscriberQueueName);
 
-        public Task<IReadOnlyList<Message>> GetRepliedMessages()
+        public IReadOnlyList<Message> GetRepliedMessages()
             => GetMessages(_integrationTestingOptions.ReplyQueueName);
 
-        public async Task<IReadOnlyList<Message>> GetMessages([NotNull] string queueName)
+        public IReadOnlyList<Message> GetMessages([NotNull] string queueName)
         {
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
 
-            var transportMessages = _network.GetMessages(queueName);
-            var messages = new List<Message>();
-
-            foreach (var transportMessage in transportMessages)
-            {
-                var message = await _serializer.Deserialize(transportMessage);
-                messages.Add(message);
-            }
-
-            return messages;
+            return _network.GetMessages(queueName)
+                .Select(m => AsyncUtility.RunSync(() => _serializer.Deserialize(m)))
+                .ToList();
         }
 
         public async Task Send(object commandMessage, Dictionary<string, string> optionalHeaders = null)
@@ -131,19 +132,47 @@ namespace Rebus.IntegrationTesting
             await _inner.Send(commandMessage, AddReturnAddress(optionalHeaders));
         }
 
+        void ISyncBus.Send(object commandMessage, Dictionary<string, string> optionalHeaders)
+            => AsyncUtility.RunSync(() => Send(commandMessage, optionalHeaders));
+
         public Task SendLocal(object commandMessage, Dictionary<string, string> optionalHeaders = null)
             => _inner.SendLocal(commandMessage, AddReturnAddress(optionalHeaders));
 
-        public Task Defer(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders = null) => _inner.Defer(delay, message, optionalHeaders);
-        public Task DeferLocal(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders = null) => _inner.DeferLocal(delay, message, optionalHeaders);
+        void ISyncBus.SendLocal(object commandMessage, Dictionary<string, string> optionalHeaders)
+            => AsyncUtility.RunSync(() => SendLocal(commandMessage, optionalHeaders));
 
-        public Task Publish(object eventMessage, Dictionary<string, string> optionalHeaders = null) => _inner.Publish(eventMessage, optionalHeaders);
-        public Task Reply(object replyMessage, Dictionary<string, string> optionalHeaders = null) => _inner.Reply(replyMessage, optionalHeaders);
+        public Task Defer(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders = null)
+            => _inner.Defer(delay, message, optionalHeaders);
+
+        void ISyncBus.Defer(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders)
+            => AsyncUtility.RunSync(() => Defer(delay, message, optionalHeaders));
+        
+        public Task DeferLocal(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders = null)
+            => _inner.DeferLocal(delay, message, optionalHeaders);
+
+        void ISyncBus.DeferLocal(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders)
+            => AsyncUtility.RunSync(() => DeferLocal(delay, message, optionalHeaders));
+
+        public Task Publish(object eventMessage, Dictionary<string, string> optionalHeaders = null)
+            => _inner.Publish(eventMessage, optionalHeaders);
+
+        void ISyncBus.Publish(object eventMessage, Dictionary<string, string> optionalHeaders)
+            => AsyncUtility.RunSync(() => Publish(eventMessage, optionalHeaders));
+        
+        public Task Reply(object replyMessage, Dictionary<string, string> optionalHeaders = null)
+            => _inner.Reply(replyMessage, optionalHeaders);
+
+        void ISyncBus.Reply(object replyMessage, Dictionary<string, string> optionalHeaders)
+            => AsyncUtility.RunSync(() => Reply(replyMessage, optionalHeaders));
 
         public Task Subscribe<TEvent>() => _inner.Subscribe<TEvent>();
+        void ISyncBus.Subscribe<TEvent>() => AsyncUtility.RunSync(Subscribe<TEvent>);
         public Task Subscribe(Type eventType) => _inner.Subscribe(eventType);
+        void ISyncBus.Subscribe(Type eventType) => AsyncUtility.RunSync(() => Subscribe(eventType));
         public Task Unsubscribe<TEvent>() => _inner.Unsubscribe<TEvent>();
+        void ISyncBus.Unsubscribe<TEvent>() => AsyncUtility.RunSync(Unsubscribe<TEvent>);
         public Task Unsubscribe(Type eventType) => _inner.Unsubscribe(eventType);
+        void ISyncBus.Unsubscribe(Type eventType) => AsyncUtility.RunSync(() => Unsubscribe(eventType));
 
         public void Dispose() => _inner.Dispose();
 

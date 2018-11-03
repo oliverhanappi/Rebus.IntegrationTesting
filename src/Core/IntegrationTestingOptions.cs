@@ -6,77 +6,24 @@ namespace Rebus.IntegrationTesting
 {
     public class IntegrationTestingOptions
     {
-        private string _inputQueueName = "InputQueue";
-        private string _subscriberQueueName = "SubscriberQueue";
-        private string _replyQueueName = "ReplyQueue";
-        private TimeSpan _deferralProcessingLimit = TimeSpan.FromSeconds(1);
-        private TimeSpan _maxProcessingTime = TimeSpan.FromSeconds(60);
-        private int _numberOfWorkers = 1;
+        [NotNull] public string InputQueueName { get; }
+        [NotNull] public string SubscriberQueueName { get; }
+        [NotNull] public string ReplyQueueName { get; }
+        public TimeSpan DeferralProcessingLimit { get; }
+        public TimeSpan MaxProcessingTime { get; }
 
-        [NotNull]
-        public string InputQueueName
+        public int NumberOfWorkers { get; }
+
+        public IntegrationTestingOptions([NotNull] string inputQueueName, [NotNull] string subscriberQueueName,
+            [NotNull] string replyQueueName, TimeSpan deferralProcessingLimit, TimeSpan maxProcessingTime,
+            int numberOfWorkers)
         {
-            get => _inputQueueName;
-            set => _inputQueueName = value ?? throw new ArgumentNullException(nameof(value));
-        }
-
-        [NotNull]
-        public string SubscriberQueueName
-        {
-            get => _subscriberQueueName;
-            set => _subscriberQueueName = value ?? throw new ArgumentNullException(nameof(value));
-        }
-
-        [NotNull]
-        public string ReplyQueueName
-        {
-            get => _replyQueueName;
-            set => _replyQueueName = value ?? throw new ArgumentNullException(nameof(value));
-        }
-
-        public TimeSpan DeferralProcessingLimit
-        {
-            get => _deferralProcessingLimit;
-            set
-            {
-                if (value.Ticks < 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value),
-                        $"Deferral processing limit must not be negative, but was {value}");
-                }
-
-                _deferralProcessingLimit = value;
-            }
-        }
-
-        public TimeSpan MaxProcessingTime
-        {
-            get => _maxProcessingTime;
-            set
-            {
-                if (value.Ticks <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value),
-                        $"Max processing time must not be positive, but was {value}");
-                }
-
-                _maxProcessingTime = value;
-            }
-        }
-
-        public int NumberOfWorkers
-        {
-            get => _numberOfWorkers;
-            set
-            {
-                if (value <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value),
-                        $"Number of workers must be greater then zero, but was {value}.");
-                }
-
-                _numberOfWorkers = value;
-            }
+            InputQueueName = inputQueueName ?? throw new ArgumentNullException(nameof(inputQueueName));
+            SubscriberQueueName = subscriberQueueName ?? throw new ArgumentNullException(nameof(subscriberQueueName));
+            ReplyQueueName = replyQueueName ?? throw new ArgumentNullException(nameof(replyQueueName));
+            DeferralProcessingLimit = deferralProcessingLimit;
+            MaxProcessingTime = maxProcessingTime;
+            NumberOfWorkers = numberOfWorkers;
         }
     }
 }

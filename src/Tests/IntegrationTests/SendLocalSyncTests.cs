@@ -4,6 +4,7 @@ using Autofac;
 using JetBrains.Annotations;
 using NUnit.Framework;
 using Rebus.Bus;
+using Rebus.Bus.Advanced;
 using Rebus.Config;
 using Rebus.Handlers;
 using Rebus.Routing.TypeBased;
@@ -11,37 +12,49 @@ using Rebus.Routing.TypeBased;
 namespace Rebus.IntegrationTesting.Tests.IntegrationTests
 {
     [TestFixture]
-    public class SendTests
+    public class SendLocalSyncTests
     {
-        private class IncomingCommand
+        private class Command1
         {
             public string Value { get; set; }
         }
 
-        private class OutgoingCommand
+        private class Command2
+        {
+            public string Value { get; set; }
+        }
+
+        private class Event
         {
             public string Value { get; set; }
         }
 
         [UsedImplicitly]
-        private class CommandHandler : IHandleMessages<IncomingCommand>
+        private class CommandHandler : IHandleMessages<Command1>, IHandleMessages<Command2>
         {
-            private readonly IBus _bus;
+            private readonly ISyncBus _bus;
 
-            public CommandHandler(IBus bus)
+            public CommandHandler(ISyncBus bus)
             {
                 _bus = bus;
             }
 
-            public async Task Handle(IncomingCommand incomingCommand)
+            public async Task Handle(Command1 command1)
             {
                 await Task.Yield();
-                await _bus.Send(new OutgoingCommand {Value = incomingCommand.Value.ToUpper()});
+                _bus.SendLocal(new Command2 {Value = command1.Value.ToUpper()});
+            }
+
+            public async Task Handle(Command2 command2)
+            {
+                await Task.Yield();
+                _bus.Publish(new Event {Value = command2.Value + "Reply"});
             }
         }
 
         private IContainer _container;
         private IIntegrationTestingBus _bus;
+        private ISyncBus _syncBus;
 
         [SetUp]
         public void SetUp()
@@ -49,12 +62,13 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
             var containerBuilder = new ContainerBuilder();
             containerBuilder.RegisterRebus(c => c
                 .ConfigureForIntegrationTesting()
-                .Routing(r => r.TypeBased().Map<OutgoingCommand>("OtherQueue")));
+                .Routing(r => r.TypeBased().Map<Command2>("OtherQueue")));
 
             containerBuilder.RegisterHandler<CommandHandler>();
             _container = containerBuilder.Build();
 
             _bus = (IIntegrationTestingBus) _container.Resolve<IBus>();
+            _syncBus = _container.Resolve<ISyncBus>();
         }
 
         [TearDown]
@@ -64,17 +78,17 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         }
 
         [Test]
-        public async Task SendsMessage()
+        public async Task SendsMessageLocally()
         {
-            await _bus.Send(new IncomingCommand {Value = "Hello World"});
+            _syncBus.Send(new Command1 {Value = "Hello World"});
 
-            var incomingCommand = (IncomingCommand) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var incomingCommand = (Command1) _bus.GetPendingMessages().Select(m => m.Body).Single();
             Assert.That(incomingCommand.Value, Is.EqualTo("Hello World"));
 
             await _bus.ProcessPendingMessages();
 
-            var outgoingCommand = (OutgoingCommand) _bus.GetMessages("OtherQueue").Select(m => m.Body).Single();
-            Assert.That(outgoingCommand.Value, Is.EqualTo("HELLO WORLD"));
+            var @event = (Event) _bus.GetPublishedMessages().Select(m => m.Body).Single();
+            Assert.That(@event.Value, Is.EqualTo("HELLO WORLDReply"));
         }
     }
 }

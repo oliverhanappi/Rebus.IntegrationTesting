@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Rebus.Bus;
@@ -9,10 +10,11 @@ namespace Rebus.IntegrationTesting
     public interface IIntegrationTestingBus : IBus
     {
         Task ProcessPendingMessages(CancellationToken cancellationToken = default);
+        void DecreaseDeferral(TimeSpan timeSpan);
 
-        Task<IReadOnlyList<Message>> GetPendingMessages();
-        Task<IReadOnlyList<Message>> GetPublishedMessages();
-        Task<IReadOnlyList<Message>> GetRepliedMessages();
-        Task<IReadOnlyList<Message>> GetMessages(string queueName);
+        IReadOnlyList<Message> GetPendingMessages();
+        IReadOnlyList<Message> GetPublishedMessages();
+        IReadOnlyList<Message> GetRepliedMessages();
+        IReadOnlyList<Message> GetMessages(string queueName);
     }
 }

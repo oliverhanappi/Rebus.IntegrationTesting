@@ -13,11 +13,20 @@ namespace Rebus.IntegrationTesting.Transport
 {
     public class IntegrationTestingQueue
     {
+        private readonly IntegrationTestingOptions _options;
+
         private readonly List<IntegrationTestingNetworkMessage> _messages
             = new List<IntegrationTestingNetworkMessage>();
 
         private readonly List<TaskCompletionSource<object>> _taskCompletionSources
             = new List<TaskCompletionSource<object>>();
+
+        private volatile bool _receivingPaused;
+
+        public IntegrationTestingQueue([NotNull] IntegrationTestingOptions options)
+        {
+            _options = options ?? throw new ArgumentNullException(nameof(options));
+        }
 
         public void Send([NotNull] TransportMessage message, [NotNull] IntegrationTestingTransaction transaction)
         {
@@ -42,6 +51,9 @@ namespace Rebus.IntegrationTesting.Transport
 
             lock (_messages)
             {
+                if (_receivingPaused)
+                    return null;
+
                 var networkMessage = _messages
                     .Where(m => m.Transaction == null)
                     .Where(m => m.VisibleAfter <= RebusTime.Now)
@@ -70,11 +82,13 @@ namespace Rebus.IntegrationTesting.Transport
 
                         if (IsQueueEmpty())
                         {
+                            _receivingPaused = true;
+
                             foreach (var taskCompletionSource in _taskCompletionSources)
                             {
                                 taskCompletionSource.TrySetResult(null);
                             }
-                            
+
                             _taskCompletionSources.Clear();
                         }
                     }
@@ -109,15 +123,38 @@ namespace Rebus.IntegrationTesting.Transport
 
                 var taskCompletionSource = new TaskCompletionSource<object>();
                 cancellationToken.Register(() => taskCompletionSource.TrySetCanceled());
-                
+
                 _taskCompletionSources.Add(taskCompletionSource);
                 return taskCompletionSource.Task;
             }
         }
 
+        public void ResumeReceiving()
+        {
+            lock (_messages)
+            {
+                _receivingPaused = false;
+            }
+        }
+
         private bool IsQueueEmpty()
         {
-            return _messages.Count == 0;
+            lock (_messages)
+            {
+                var now = RebusTime.Now;
+                return _messages.All(m => m.VisibleAfter > now + _options.DeferralProcessingLimit);
+            }
+        }
+
+        public void DecreaseDeferral(TimeSpan timeSpan)
+        {
+            lock (_messages)
+            {
+                foreach (var message in _messages)
+                {
+                    message.DecreaseDeferral(timeSpan);
+                }
+            }
         }
     }
 }

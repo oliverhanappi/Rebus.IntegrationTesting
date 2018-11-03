@@ -11,13 +11,20 @@ namespace Rebus.IntegrationTesting.Transport
 {
     public class IntegrationTestingNetwork
     {
+        private readonly IntegrationTestingOptions _options;
+
         private readonly ConcurrentDictionary<string, IntegrationTestingQueue> _queues
             = new ConcurrentDictionary<string, IntegrationTestingQueue>(StringComparer.OrdinalIgnoreCase);
 
+        public IntegrationTestingNetwork([NotNull] IntegrationTestingOptions options)
+        {
+            _options = options ?? throw new ArgumentNullException(nameof(options));
+        }
+        
         [NotNull]
         private IntegrationTestingQueue GetQueue([NotNull] string queueName)
         {
-            return _queues.GetOrAdd(queueName, _ => new IntegrationTestingQueue());
+            return _queues.GetOrAdd(queueName, _ => new IntegrationTestingQueue(_options));
         }
         
         [NotNull]
@@ -55,6 +62,19 @@ namespace Rebus.IntegrationTesting.Transport
 
             var queue = GetQueue(queueName);
             return queue.WaitUntilEmpty(cancellationToken);
+        }
+
+        public void ResumeReceiving()
+        {
+            foreach (var queue in _queues.Values)
+            {
+                queue.ResumeReceiving();
+            }
+        }
+
+        public void DecreaseDeferral(string queueName, TimeSpan timeSpan)
+        {
+            GetQueue(queueName).DecreaseDeferral(timeSpan);
         }
     }
 }

@@ -79,12 +79,12 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         {
             await _bus.Send(new Command1 {Value = "Hello World"});
 
-            var incomingCommand = (Command1) (await _bus.GetPendingMessages()).Select(m => m.Body).Single();
+            var incomingCommand = (Command1) _bus.GetPendingMessages().Select(m => m.Body).Single();
             Assert.That(incomingCommand.Value, Is.EqualTo("Hello World"));
 
             await _bus.ProcessPendingMessages();
 
-            var @event = (Event) (await _bus.GetPublishedMessages()).Select(m => m.Body).Single();
+            var @event = (Event) _bus.GetPublishedMessages().Select(m => m.Body).Single();
             Assert.That(@event.Value, Is.EqualTo("HELLO WORLDReply"));
         }
     }
