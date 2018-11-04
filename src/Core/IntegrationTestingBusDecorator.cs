@@ -7,11 +7,15 @@ using JetBrains.Annotations;
 using Rebus.Bus;
 using Rebus.Bus.Advanced;
 using Rebus.DataBus;
+using Rebus.DataBus.InMem;
 using Rebus.Extensions;
+using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Transport;
 using Rebus.IntegrationTesting.Utils;
+using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Routing;
+using Rebus.Sagas;
 using Rebus.Serialization;
 using Rebus.Transport;
 
@@ -24,6 +28,8 @@ namespace Rebus.IntegrationTesting
         private readonly IntegrationTestingNetwork _network;
         private readonly ISerializer _serializer;
         private readonly IRouter _router;
+        private readonly ILog _log;
+        private readonly IntegrationTestingSagaStorage _sagaStorage;
 
         public IAdvancedApi Advanced => this;
 
@@ -36,15 +42,26 @@ namespace Rebus.IntegrationTesting
         
         int IWorkersApi.Count => _inner.Advanced.Workers.Count;
 
-        public IntegrationTestingBusDecorator([NotNull] IBus inner, [NotNull] IntegrationTestingNetwork network,
-            [NotNull] ISerializer serializer, [NotNull] IRouter router,
-            [NotNull] IntegrationTestingOptions integrationTestingOptions)
+        public InMemDataStore DataBusData { get; }
+
+        public IntegrationTestingBusDecorator(
+            [NotNull] IBus inner,
+            [NotNull] IntegrationTestingNetwork network,
+            [NotNull] ISerializer serializer,
+            [NotNull] IRouter router,
+            [NotNull] ILog log,
+            [NotNull] IntegrationTestingSagaStorage sagaStorage,
+            [NotNull] IntegrationTestingOptions integrationTestingOptions,
+            [NotNull] InMemDataStore inMemDataStore)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _network = network ?? throw new ArgumentNullException(nameof(network));
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             _router = router ?? throw new ArgumentNullException(nameof(router));
+            _log = log ?? throw new ArgumentNullException(nameof(log));
+            _sagaStorage = sagaStorage ?? throw new ArgumentNullException(nameof(sagaStorage));
             _integrationTestingOptions = integrationTestingOptions ?? throw new ArgumentNullException(nameof(integrationTestingOptions));
+            DataBusData = inMemDataStore ?? throw new ArgumentNullException(nameof(inMemDataStore));
         }
 
         public async Task ProcessPendingMessages(CancellationToken cancellationToken = default)
@@ -69,14 +86,24 @@ namespace Rebus.IntegrationTesting
 
         private async Task StartWorkers(CancellationToken cancellationToken = default)
         {
+            _log.Debug("Starting workers...");
             _inner.Advanced.Workers.SetNumberOfWorkers(_integrationTestingOptions.NumberOfWorkers);
+            
+            _log.Debug("Waiting for workers to finish starting...");
             await WaitForNumberOfWorkers(_integrationTestingOptions.NumberOfWorkers, cancellationToken);
+
+            _log.Debug("Workers started.");
         }
 
         private async Task StopWorkers(CancellationToken cancellationToken = default)
         {
+            _log.Debug("Stopping workers...");
             _inner.Advanced.Workers.SetNumberOfWorkers(0);
+
+            _log.Debug("Waiting for workers to stop...");
             await WaitForNumberOfWorkers(0, cancellationToken);
+            
+            _log.Debug("Workers stopped.");
         }
 
         private async Task WaitForNumberOfWorkers(int expectedCount, CancellationToken cancellationToken = default)
@@ -110,6 +137,11 @@ namespace Rebus.IntegrationTesting
             return _network.GetMessages(queueName)
                 .Select(m => AsyncUtility.RunSync(() => _serializer.Deserialize(m)))
                 .ToList();
+        }
+
+        public IReadOnlyCollection<ISagaData> GetSagaDatas()
+        {
+            return _sagaStorage.SagaDatas.ToList();
         }
 
         public async Task Send(object commandMessage, Dictionary<string, string> optionalHeaders = null)

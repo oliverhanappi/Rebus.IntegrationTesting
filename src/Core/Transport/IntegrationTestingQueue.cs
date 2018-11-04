@@ -49,53 +49,62 @@ namespace Rebus.IntegrationTesting.Transport
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
 
-            lock (_messages)
+            if (Monitor.TryEnter(_messages, TimeSpan.Zero))
             {
-                if (_receivingPaused)
-                    return null;
-
-                var networkMessage = _messages
-                    .Where(m => m.Transaction == null)
-                    .Where(m => m.VisibleAfter <= RebusTime.Now)
-                    .OrderBy(m => m.VisibleAfter)
-                    .ThenBy(m => m.Id)
-                    .FirstOrDefault();
-
-                if (networkMessage == null)
-                    return null;
-
-                networkMessage.Transaction = transaction;
-
-                transaction.OnCommit(() =>
+                try
                 {
-                    lock (_messages)
-                    {
-                        _messages.Remove(networkMessage);
-                    }
-                });
+                    if (_receivingPaused)
+                        return null;
 
-                transaction.OnDispose(() =>
-                {
-                    lock (_messages)
-                    {
-                        networkMessage.Transaction = null;
+                    var networkMessage = _messages
+                        .Where(m => m.Transaction == null)
+                        .Where(m => m.VisibleAfter <= RebusTime.Now)
+                        .OrderBy(m => m.VisibleAfter)
+                        .ThenBy(m => m.Id)
+                        .FirstOrDefault();
 
-                        if (IsQueueEmpty())
+                    if (networkMessage == null)
+                        return null;
+
+                    networkMessage.Transaction = transaction;
+
+                    transaction.OnCommit(() =>
+                    {
+                        lock (_messages)
                         {
-                            _receivingPaused = true;
-
-                            foreach (var taskCompletionSource in _taskCompletionSources)
-                            {
-                                taskCompletionSource.TrySetResult(null);
-                            }
-
-                            _taskCompletionSources.Clear();
+                            _messages.Remove(networkMessage);
                         }
-                    }
-                });
+                    });
 
-                return networkMessage.TransportMessage;
+                    transaction.OnDispose(() =>
+                    {
+                        lock (_messages)
+                        {
+                            networkMessage.Transaction = null;
+
+                            if (IsQueueEmpty())
+                            {
+                                _receivingPaused = true;
+
+                                foreach (var taskCompletionSource in _taskCompletionSources)
+                                {
+                                    taskCompletionSource.TrySetResult(null);
+                                }
+
+                                _taskCompletionSources.Clear();
+                            }
+                        }
+                    });
+
+                    return networkMessage.TransportMessage;
+                }
+                finally
+                {
+                    Monitor.Exit(_messages);
+                }
             }
+
+            return null;
         }
 
         [NotNull]

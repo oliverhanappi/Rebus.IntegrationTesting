@@ -2,10 +2,15 @@
 using JetBrains.Annotations;
 using Rebus.Bus;
 using Rebus.Config;
+using Rebus.DataBus;
+using Rebus.DataBus.InMem;
 using Rebus.Injection;
+using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Subscriptions;
 using Rebus.IntegrationTesting.Transport;
+using Rebus.Logging;
 using Rebus.Routing;
+using Rebus.Sagas;
 using Rebus.Serialization;
 using Rebus.Subscriptions;
 using Rebus.Transport;
@@ -24,13 +29,22 @@ namespace Rebus.IntegrationTesting
             
             var integrationTestingOptions = optionsBuilder.Build();
 
+            var inMemDataStore = new InMemDataStore();
+
             return rebusConfigurer
-                .Options(o => o.Register(_ => integrationTestingOptions))
-                .Options(o => o.Register(CreateNetwork))
-                .Options(o => o.SetNumberOfWorkers(0))
-                .Options(o => o.Decorate(CreateBusDecorator))
+                .Options(o =>
+                {
+                    o.Register(_ => integrationTestingOptions);
+                    o.Register(_ => inMemDataStore);
+                    o.Register(CreateNetwork);
+                    o.SetNumberOfWorkers(0);
+                    o.SetMaxParallelism(1);
+                    o.Decorate(CreateBusDecorator);
+                    o.EnableDataBus().StoreInMemory(inMemDataStore);
+                })
                 .Transport(t => t.Register(CreateTransport))
-                .Subscriptions(s => s.Register(CreateSubscriptionStorage));
+                .Subscriptions(s => s.Register(CreateSubscriptionStorage))
+                .Sagas(s => s.Register(CreateSagaStorage));
         }
 
         private static IntegrationTestingNetwork CreateNetwork(IResolutionContext resolutionContext)
@@ -52,6 +66,11 @@ namespace Rebus.IntegrationTesting
             return new IntegrationTestingSubscriptionStorage(options);
         }
 
+        private static ISagaStorage CreateSagaStorage(IResolutionContext resolutionContext)
+        {
+            return new IntegrationTestingSagaStorage();
+        }
+
         private static IBus CreateBusDecorator(IResolutionContext resolutionContext)
         {
             var bus = resolutionContext.Get<IBus>();
@@ -59,8 +78,12 @@ namespace Rebus.IntegrationTesting
             var serializer = resolutionContext.Get<ISerializer>();
             var router = resolutionContext.Get<IRouter>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
+            var log = resolutionContext.Get<IRebusLoggerFactory>().GetLogger<IntegrationTestingBusDecorator>();
+            var sagaStorage = (IntegrationTestingSagaStorage) resolutionContext.Get<ISagaStorage>();
+            var inMemDataStore = resolutionContext.Get<InMemDataStore>();
 
-            return new IntegrationTestingBusDecorator(bus, network, serializer, router, options);
+            return new IntegrationTestingBusDecorator(
+                bus, network, serializer, router, log, sagaStorage, options, inMemDataStore);
         }
     }
 }

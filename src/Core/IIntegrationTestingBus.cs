@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Rebus.Bus;
+using Rebus.DataBus.InMem;
 using Rebus.Messages;
+using Rebus.Sagas;
 
 namespace Rebus.IntegrationTesting
 {
@@ -16,5 +18,9 @@ namespace Rebus.IntegrationTesting
         IReadOnlyList<Message> GetPublishedMessages();
         IReadOnlyList<Message> GetRepliedMessages();
         IReadOnlyList<Message> GetMessages(string queueName);
+
+        IReadOnlyCollection<ISagaData> GetSagaDatas();
+        
+        InMemDataStore DataBusData { get; }
     }
 }

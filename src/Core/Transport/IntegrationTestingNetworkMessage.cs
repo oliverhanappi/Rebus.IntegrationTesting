@@ -40,6 +40,11 @@ namespace Rebus.IntegrationTesting.Transport
         public void DecreaseDeferral(TimeSpan timeSpan)
         {
             _visibleAfter -= timeSpan;
+
+            if (TransportMessage.Headers.ContainsKey(Headers.DeferredUntil))
+            {
+                TransportMessage.Headers[Headers.DeferredUntil] = _visibleAfter.ToIso8601DateTimeOffset();
+            }
         }
 
         public override string ToString()
