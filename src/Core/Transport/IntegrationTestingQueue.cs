@@ -59,7 +59,7 @@ namespace Rebus.IntegrationTesting.Transport
                         return null;
 
                     var networkMessage = _messages
-                        .Where(m => m.Transaction == null)
+                        .Where(m => m.TransactionContext == null)
                         .Where(m => m.VisibleAfter <= RebusTime.Now)
                         .OrderBy(m => m.VisibleAfter)
                         .ThenBy(m => m.Id)
@@ -68,7 +68,7 @@ namespace Rebus.IntegrationTesting.Transport
                     if (networkMessage == null)
                         return null;
 
-                    networkMessage.Transaction = transactionContext;
+                    networkMessage.TransactionContext = transactionContext;
 
                     transactionContext.OnCommitted(() =>
                     {
@@ -84,7 +84,7 @@ namespace Rebus.IntegrationTesting.Transport
                     {
                         lock (_messages)
                         {
-                            networkMessage.Transaction = null;
+                            networkMessage.TransactionContext = null;
 
                             if (IsQueueEmpty())
                             {
@@ -118,7 +118,7 @@ namespace Rebus.IntegrationTesting.Transport
             lock (_messages)
             {
                 return _messages
-                    .Where(m => m.Transaction == null)
+                    .Where(m => m.TransactionContext == null)
                     .OrderBy(m => m.VisibleAfter)
                     .ThenBy(m => m.Id)
                     .Select(m => m.TransportMessage.Clone())
