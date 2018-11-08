@@ -5,9 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Rebus.Bus;
-using Rebus.IntegrationTesting.Transactions;
 using Rebus.Messages;
 using Rebus.Time;
+using Rebus.Transport;
 
 namespace Rebus.IntegrationTesting.Transport
 {
@@ -28,26 +28,28 @@ namespace Rebus.IntegrationTesting.Transport
             _options = options ?? throw new ArgumentNullException(nameof(options));
         }
 
-        public void Send([NotNull] TransportMessage message, [NotNull] IntegrationTestingTransaction transaction)
+        public void Send([NotNull] TransportMessage message, [NotNull] ITransactionContext transactionContext)
         {
             if (message == null) throw new ArgumentNullException(nameof(message));
-            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (transactionContext == null) throw new ArgumentNullException(nameof(transactionContext));
 
             var networkMessage = new IntegrationTestingNetworkMessage(message);
 
-            transaction.OnCommit(() =>
+            transactionContext.OnCommitted(() =>
             {
                 lock (_messages)
                 {
                     _messages.Add(networkMessage);
                 }
+
+                return Task.CompletedTask;
             });
         }
 
         [CanBeNull]
-        public TransportMessage Receive([NotNull] IntegrationTestingTransaction transaction)
+        public TransportMessage Receive([NotNull] ITransactionContext transactionContext)
         {
-            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (transactionContext == null) throw new ArgumentNullException(nameof(transactionContext));
 
             if (Monitor.TryEnter(_messages, TimeSpan.Zero))
             {
@@ -66,17 +68,19 @@ namespace Rebus.IntegrationTesting.Transport
                     if (networkMessage == null)
                         return null;
 
-                    networkMessage.Transaction = transaction;
+                    networkMessage.Transaction = transactionContext;
 
-                    transaction.OnCommit(() =>
+                    transactionContext.OnCommitted(() =>
                     {
                         lock (_messages)
                         {
                             _messages.Remove(networkMessage);
                         }
+
+                        return Task.CompletedTask;
                     });
 
-                    transaction.OnDispose(() =>
+                    transactionContext.OnDisposed(() =>
                     {
                         lock (_messages)
                         {

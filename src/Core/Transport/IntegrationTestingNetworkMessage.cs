@@ -3,9 +3,9 @@ using System.Threading;
 using JetBrains.Annotations;
 using Rebus.Bus;
 using Rebus.Extensions;
-using Rebus.IntegrationTesting.Transactions;
 using Rebus.Messages;
 using Rebus.Time;
+using Rebus.Transport;
 
 namespace Rebus.IntegrationTesting.Transport
 {
@@ -13,7 +13,7 @@ namespace Rebus.IntegrationTesting.Transport
     {
         private static int _nextId = 1;
 
-        private volatile IntegrationTestingTransaction _transaction;
+        private volatile ITransactionContext _transaction;
         private DateTimeOffset _visibleAfter;
 
         public int Id { get; }
@@ -22,7 +22,7 @@ namespace Rebus.IntegrationTesting.Transport
 
         public TransportMessage TransportMessage { get; }
 
-        public IntegrationTestingTransaction Transaction
+        public ITransactionContext Transaction
         {
             get => _transaction;
             set => _transaction = value;

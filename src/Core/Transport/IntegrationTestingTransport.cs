@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
-using Rebus.IntegrationTesting.Transactions;
 using Rebus.Messages;
 using Rebus.Transport;
 
@@ -26,17 +25,13 @@ namespace Rebus.IntegrationTesting.Transport
 
         public Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
         {
-            var transaction = context.GetTransaction();
-            _network.Send(destinationAddress, message, transaction);
-
+            _network.Send(destinationAddress, message, context);
             return Task.CompletedTask;
         }
 
         public Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
         {
-            var transaction = context.GetTransaction();
-            var transportMessage = _network.Receive(Address, transaction);
-
+            var transportMessage = _network.Receive(Address, context);
             return Task.FromResult(transportMessage);
         }
     }

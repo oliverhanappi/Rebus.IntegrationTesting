@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
-using Rebus.IntegrationTesting.Transactions;
 using Rebus.Messages;
+using Rebus.Transport;
 
 namespace Rebus.IntegrationTesting.Transport
 {
@@ -35,25 +35,25 @@ namespace Rebus.IntegrationTesting.Transport
         }
 
         public void Send([NotNull] string queueName, [NotNull] TransportMessage message,
-            [NotNull] IntegrationTestingTransaction transaction)
+            [NotNull] ITransactionContext transactionContext)
         {
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
             if (message == null) throw new ArgumentNullException(nameof(message));
-            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (transactionContext == null) throw new ArgumentNullException(nameof(transactionContext));
 
             var queue = GetQueue(queueName);
-            queue.Send(message, transaction);
+            queue.Send(message, transactionContext);
         }
 
         [CanBeNull]
         public TransportMessage Receive([NotNull] string queueName,
-            [NotNull] IntegrationTestingTransaction transaction)
+            [NotNull] ITransactionContext transactionContext)
         {
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
-            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (transactionContext == null) throw new ArgumentNullException(nameof(transactionContext));
 
             var queue = GetQueue(queueName);
-            return queue.Receive(transaction);
+            return queue.Receive(transactionContext);
         }
 
         public Task WaitUntilQueueIsEmpty([NotNull] string queueName, CancellationToken cancellationToken = default)
