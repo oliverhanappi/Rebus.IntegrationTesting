@@ -11,7 +11,7 @@ using Rebus.Routing.TypeBased;
 
 namespace Rebus.IntegrationTesting.Tests.IntegrationTests
 {
-    [TestFixture, Ignore("TODO")]
+    [TestFixture]
     public class DeferTests
     {
         private class Command
