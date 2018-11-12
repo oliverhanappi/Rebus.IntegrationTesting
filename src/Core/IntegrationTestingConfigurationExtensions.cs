@@ -5,19 +5,25 @@ using Rebus.Config;
 using Rebus.DataBus;
 using Rebus.DataBus.InMem;
 using Rebus.Injection;
+using Rebus.IntegrationTesting.Routing;
 using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Subscriptions;
 using Rebus.IntegrationTesting.Transport;
+using Rebus.IntegrationTesting.Workers;
 using Rebus.Logging;
+using Rebus.Pipeline;
+using Rebus.Pipeline.Receive;
+using Rebus.Pipeline.Send;
 using Rebus.Routing;
 using Rebus.Sagas;
 using Rebus.Serialization;
 using Rebus.Subscriptions;
 using Rebus.Transport;
+using Rebus.Workers;
 
 namespace Rebus.IntegrationTesting
 {
-    public static class RebusConfigurerExtensions
+    public static class IntegrationTestingConfigurationExtensions
     {
         public static RebusConfigurer ConfigureForIntegrationTesting([NotNull] this RebusConfigurer rebusConfigurer,
             [CanBeNull] Action<IntegrationTestingOptionsBuilder> configure = null)
@@ -37,9 +43,14 @@ namespace Rebus.IntegrationTesting
                     o.Register(_ => integrationTestingOptions);
                     o.Register(_ => inMemDataStore);
                     o.Register(CreateNetwork);
+                    o.Register(CreateWorkerFactory);
+
+                    o.Decorate(InjectPipelineSteps);
+                    o.Decorate(CreateRouterDecorator);
+                    o.Decorate(CreateBusDecorator);
+                    
                     o.SetNumberOfWorkers(0);
                     o.SetMaxParallelism(1);
-                    o.Decorate(CreateBusDecorator);
                     o.EnableDataBus().StoreInMemory(inMemDataStore);
                 })
                 .Transport(t => t.Register(CreateTransport))
@@ -47,6 +58,11 @@ namespace Rebus.IntegrationTesting
                 .Sagas(s => s.Register(CreateSagaStorage));
         }
 
+        private static IWorkerFactory CreateWorkerFactory(IResolutionContext resolutionContext)
+        {
+            return new NoOpWorkerFactory();
+        }
+        
         private static IntegrationTestingNetwork CreateNetwork(IResolutionContext resolutionContext)
         {
             var options = resolutionContext.Get<IntegrationTestingOptions>();
@@ -71,6 +87,27 @@ namespace Rebus.IntegrationTesting
             return new IntegrationTestingSagaStorage();
         }
 
+        private static IRouter CreateRouterDecorator(IResolutionContext resolutionContext)
+        {
+            var router = resolutionContext.Get<IRouter>();
+            var options = resolutionContext.Get<IntegrationTestingOptions>();
+            
+            return new IntegrationTestingRouterDecorator(router, options.InputQueueName);
+        }
+
+        private static IPipeline InjectPipelineSteps(IResolutionContext resolutionContext)
+        {
+            var pipeline = resolutionContext.Get<IPipeline>();
+            var options = resolutionContext.Get<IntegrationTestingOptions>();
+
+            var defaultReturnAddressStep = new DefaultReturnAddressStep(options.ReplyQueueName);
+            var injector = new PipelineStepInjector(pipeline)
+                .OnSend(defaultReturnAddressStep, PipelineRelativePosition.Before, typeof(AssignDefaultHeadersStep));
+
+            return new PipelineStepRemover(injector)
+                .RemoveIncomingStep(s => s is HandleDeferredMessagesStep);
+        }
+
         private static IBus CreateBusDecorator(IResolutionContext resolutionContext)
         {
             var bus = resolutionContext.Get<IBus>();
@@ -81,9 +118,10 @@ namespace Rebus.IntegrationTesting
             var log = resolutionContext.Get<IRebusLoggerFactory>().GetLogger<IntegrationTestingBusDecorator>();
             var sagaStorage = (IntegrationTestingSagaStorage) resolutionContext.Get<ISagaStorage>();
             var inMemDataStore = resolutionContext.Get<InMemDataStore>();
+            var pipelineInvoker = resolutionContext.Get<IPipelineInvoker>();
 
             return new IntegrationTestingBusDecorator(
-                bus, network, serializer, router, log, sagaStorage, options, inMemDataStore);
+                bus, network, serializer, router, log, sagaStorage, options, inMemDataStore, pipelineInvoker);
         }
     }
 }

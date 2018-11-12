@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Rebus.Messages;
 using Rebus.Transport;
@@ -54,22 +52,6 @@ namespace Rebus.IntegrationTesting.Transport
 
             var queue = GetQueue(queueName);
             return queue.Receive(transactionContext);
-        }
-
-        public Task WaitUntilQueueIsEmpty([NotNull] string queueName, CancellationToken cancellationToken = default)
-        {
-            if (queueName == null) throw new ArgumentNullException(nameof(queueName));
-
-            var queue = GetQueue(queueName);
-            return queue.WaitUntilEmpty(cancellationToken);
-        }
-
-        public void ResumeReceiving()
-        {
-            foreach (var queue in _queues.Values)
-            {
-                queue.ResumeReceiving();
-            }
         }
 
         public void DecreaseDeferral(string queueName, TimeSpan timeSpan)

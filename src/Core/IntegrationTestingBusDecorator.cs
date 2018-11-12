@@ -6,14 +6,13 @@ using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Rebus.Bus;
 using Rebus.Bus.Advanced;
-using Rebus.DataBus;
 using Rebus.DataBus.InMem;
-using Rebus.Extensions;
 using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Transport;
 using Rebus.IntegrationTesting.Utils;
 using Rebus.Logging;
 using Rebus.Messages;
+using Rebus.Pipeline;
 using Rebus.Routing;
 using Rebus.Sagas;
 using Rebus.Serialization;
@@ -21,7 +20,7 @@ using Rebus.Transport;
 
 namespace Rebus.IntegrationTesting
 {
-    public class IntegrationTestingBusDecorator : IIntegrationTestingBus, IAdvancedApi, ISyncBus, IWorkersApi 
+    public class IntegrationTestingBusDecorator : IIntegrationTestingBus 
     {
         private readonly IBus _inner;
         private readonly IntegrationTestingOptions _integrationTestingOptions;
@@ -30,18 +29,9 @@ namespace Rebus.IntegrationTesting
         private readonly IRouter _router;
         private readonly ILog _log;
         private readonly IntegrationTestingSagaStorage _sagaStorage;
+        private readonly IPipelineInvoker _pipelineInvoker;
 
-        public IAdvancedApi Advanced => this;
-
-        ITopicsApi IAdvancedApi.Topics => _inner.Advanced.Topics;
-        IRoutingApi IAdvancedApi.Routing => _inner.Advanced.Routing;
-        ITransportMessageApi IAdvancedApi.TransportMessage => _inner.Advanced.TransportMessage;
-        IDataBus IAdvancedApi.DataBus => _inner.Advanced.DataBus;
-        ISyncBus IAdvancedApi.SyncBus => this;
-        IWorkersApi IAdvancedApi.Workers => this;
-        
-        int IWorkersApi.Count => _inner.Advanced.Workers.Count;
-
+        public IAdvancedApi Advanced => _inner.Advanced;
         public InMemDataStore DataBusData { get; }
 
         public IntegrationTestingBusDecorator(
@@ -52,7 +42,8 @@ namespace Rebus.IntegrationTesting
             [NotNull] ILog log,
             [NotNull] IntegrationTestingSagaStorage sagaStorage,
             [NotNull] IntegrationTestingOptions integrationTestingOptions,
-            [NotNull] InMemDataStore inMemDataStore)
+            [NotNull] InMemDataStore inMemDataStore,
+            [NotNull] IPipelineInvoker pipelineInvoker)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _network = network ?? throw new ArgumentNullException(nameof(network));
@@ -61,58 +52,25 @@ namespace Rebus.IntegrationTesting
             _log = log ?? throw new ArgumentNullException(nameof(log));
             _sagaStorage = sagaStorage ?? throw new ArgumentNullException(nameof(sagaStorage));
             _integrationTestingOptions = integrationTestingOptions ?? throw new ArgumentNullException(nameof(integrationTestingOptions));
+            _pipelineInvoker = pipelineInvoker ?? throw new ArgumentNullException(nameof(pipelineInvoker));
             DataBusData = inMemDataStore ?? throw new ArgumentNullException(nameof(inMemDataStore));
         }
 
         public async Task ProcessPendingMessages(CancellationToken cancellationToken = default)
         {
-            try
+            while (!cancellationToken.IsCancellationRequested)
             {
-                _network.ResumeReceiving();
-                
-                using (var maxProcessingTime = new CancellationTokenSource(_integrationTestingOptions.MaxProcessingTime))
-                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(maxProcessingTime.Token, cancellationToken))
+                using (var scope = new RebusTransactionScope())
                 {
-                    await StartWorkers(cts.Token);
-                    await _network.WaitUntilQueueIsEmpty(_integrationTestingOptions.InputQueueName, cts.Token);
-                    await StopWorkers(cts.Token);
+                    var transportMessage = _network.Receive(_integrationTestingOptions.InputQueueName, scope.TransactionContext);
+                    if (transportMessage == null)
+                        break;
+
+                    var incomingStepContext = new IncomingStepContext(transportMessage, scope.TransactionContext);
+                    await _pipelineInvoker.Invoke(incomingStepContext);
+
+                    await scope.CompleteAsync();
                 }
-            }
-            finally
-            {
-                _inner.Advanced.Workers.SetNumberOfWorkers(0);
-            }
-        }
-
-        private async Task StartWorkers(CancellationToken cancellationToken = default)
-        {
-            _log.Debug("Starting workers...");
-            _inner.Advanced.Workers.SetNumberOfWorkers(_integrationTestingOptions.NumberOfWorkers);
-            
-            _log.Debug("Waiting for workers to finish starting...");
-            await WaitForNumberOfWorkers(_integrationTestingOptions.NumberOfWorkers, cancellationToken);
-
-            _log.Debug("Workers started.");
-        }
-
-        private async Task StopWorkers(CancellationToken cancellationToken = default)
-        {
-            _log.Debug("Stopping workers...");
-            _inner.Advanced.Workers.SetNumberOfWorkers(0);
-
-            _log.Debug("Waiting for workers to stop...");
-            await WaitForNumberOfWorkers(0, cancellationToken);
-            
-            _log.Debug("Workers stopped.");
-        }
-
-        private async Task WaitForNumberOfWorkers(int expectedCount, CancellationToken cancellationToken = default)
-        {
-            var millisecondsDelay = 10;
-            while (_inner.Advanced.Workers.Count != expectedCount)
-            {
-                await Task.Delay(millisecondsDelay, cancellationToken);
-                millisecondsDelay *= 2;
             }
         }
 
@@ -144,84 +102,29 @@ namespace Rebus.IntegrationTesting
             return _sagaStorage.SagaDatas.ToList();
         }
 
-        public async Task Send(object commandMessage, Dictionary<string, string> optionalHeaders = null)
-        {
-            if (AmbientTransactionContext.Current == null)
-            {
-                var headers = optionalHeaders ?? new Dictionary<string, string>();
-                headers[Headers.Intent] = Headers.IntentOptions.PointToPoint;
-                
-                var message = new Message(headers, commandMessage);
-                var isMapped = await _router.IsMapped(message);
-
-                if (!isMapped)
-                {
-                    await SendLocal(commandMessage, optionalHeaders);
-                    return;
-                }
-            }
-
-            await _inner.Send(commandMessage, AddReturnAddress(optionalHeaders));
-        }
-
-        void ISyncBus.Send(object commandMessage, Dictionary<string, string> optionalHeaders)
-            => AsyncUtility.RunSync(() => Send(commandMessage, optionalHeaders));
+        public Task Send(object commandMessage, Dictionary<string, string> optionalHeaders = null)
+            => _inner.Send(commandMessage, optionalHeaders);
 
         public Task SendLocal(object commandMessage, Dictionary<string, string> optionalHeaders = null)
-            => _inner.SendLocal(commandMessage, AddReturnAddress(optionalHeaders));
-
-        void ISyncBus.SendLocal(object commandMessage, Dictionary<string, string> optionalHeaders)
-            => AsyncUtility.RunSync(() => SendLocal(commandMessage, optionalHeaders));
+            => _inner.SendLocal(commandMessage, optionalHeaders);
 
         public Task Defer(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders = null)
             => _inner.Defer(delay, message, optionalHeaders);
 
-        void ISyncBus.Defer(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders)
-            => AsyncUtility.RunSync(() => Defer(delay, message, optionalHeaders));
-        
         public Task DeferLocal(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders = null)
             => _inner.DeferLocal(delay, message, optionalHeaders);
-
-        void ISyncBus.DeferLocal(TimeSpan delay, object message, Dictionary<string, string> optionalHeaders)
-            => AsyncUtility.RunSync(() => DeferLocal(delay, message, optionalHeaders));
 
         public Task Publish(object eventMessage, Dictionary<string, string> optionalHeaders = null)
             => _inner.Publish(eventMessage, optionalHeaders);
 
-        void ISyncBus.Publish(object eventMessage, Dictionary<string, string> optionalHeaders)
-            => AsyncUtility.RunSync(() => Publish(eventMessage, optionalHeaders));
-        
         public Task Reply(object replyMessage, Dictionary<string, string> optionalHeaders = null)
             => _inner.Reply(replyMessage, optionalHeaders);
 
-        void ISyncBus.Reply(object replyMessage, Dictionary<string, string> optionalHeaders)
-            => AsyncUtility.RunSync(() => Reply(replyMessage, optionalHeaders));
-
         public Task Subscribe<TEvent>() => _inner.Subscribe<TEvent>();
-        void ISyncBus.Subscribe<TEvent>() => AsyncUtility.RunSync(Subscribe<TEvent>);
         public Task Subscribe(Type eventType) => _inner.Subscribe(eventType);
-        void ISyncBus.Subscribe(Type eventType) => AsyncUtility.RunSync(() => Subscribe(eventType));
         public Task Unsubscribe<TEvent>() => _inner.Unsubscribe<TEvent>();
-        void ISyncBus.Unsubscribe<TEvent>() => AsyncUtility.RunSync(Unsubscribe<TEvent>);
         public Task Unsubscribe(Type eventType) => _inner.Unsubscribe(eventType);
-        void ISyncBus.Unsubscribe(Type eventType) => AsyncUtility.RunSync(() => Unsubscribe(eventType));
 
         public void Dispose() => _inner.Dispose();
-
-        void IWorkersApi.SetNumberOfWorkers(int numberOfWorkers)
-        {
-            // the number of workers is controlled explicitly by ProcessPendingMessages
-        }
-
-        private Dictionary<string, string> AddReturnAddress(Dictionary<string, string> optionalHeaders)
-        {
-            if (AmbientTransactionContext.Current == null)
-            {
-                optionalHeaders = optionalHeaders?.Clone() ?? new Dictionary<string, string>();
-                optionalHeaders[Headers.ReturnAddress] = _integrationTestingOptions.ReplyQueueName;
-            }
-
-            return optionalHeaders;
-        }
     }
 }

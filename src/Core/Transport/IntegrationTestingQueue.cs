@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Rebus.Bus;
@@ -20,8 +19,6 @@ namespace Rebus.IntegrationTesting.Transport
 
         private readonly List<TaskCompletionSource<object>> _taskCompletionSources
             = new List<TaskCompletionSource<object>>();
-
-        private volatile bool _receivingPaused;
 
         public IntegrationTestingQueue([NotNull] IntegrationTestingOptions options)
         {
@@ -51,64 +48,40 @@ namespace Rebus.IntegrationTesting.Transport
         {
             if (transactionContext == null) throw new ArgumentNullException(nameof(transactionContext));
 
-            if (Monitor.TryEnter(_messages, TimeSpan.Zero))
+            lock (_messages)
             {
-                try
+                var networkMessage = _messages
+                    .Where(m => m.TransactionContext == null)
+                    .Where(m => m.VisibleAfter <= RebusTime.Now + _options.DeferralProcessingLimit)
+                    .OrderBy(m => m.VisibleAfter)
+                    .ThenBy(m => m.Id)
+                    .FirstOrDefault();
+
+                if (networkMessage == null)
+                    return null;
+
+                networkMessage.TransactionContext = transactionContext;
+
+                transactionContext.OnCommitted(() =>
                 {
-                    if (_receivingPaused)
-                        return null;
-
-                    var networkMessage = _messages
-                        .Where(m => m.TransactionContext == null)
-                        .Where(m => m.VisibleAfter <= RebusTime.Now)
-                        .OrderBy(m => m.VisibleAfter)
-                        .ThenBy(m => m.Id)
-                        .FirstOrDefault();
-
-                    if (networkMessage == null)
-                        return null;
-
-                    networkMessage.TransactionContext = transactionContext;
-
-                    transactionContext.OnCommitted(() =>
+                    lock (_messages)
                     {
-                        lock (_messages)
-                        {
-                            _messages.Remove(networkMessage);
-                        }
+                        _messages.Remove(networkMessage);
+                    }
 
-                        return Task.CompletedTask;
-                    });
+                    return Task.CompletedTask;
+                });
 
-                    transactionContext.OnDisposed(() =>
-                    {
-                        lock (_messages)
-                        {
-                            networkMessage.TransactionContext = null;
-
-                            if (IsQueueEmpty())
-                            {
-                                _receivingPaused = true;
-
-                                foreach (var taskCompletionSource in _taskCompletionSources)
-                                {
-                                    taskCompletionSource.TrySetResult(null);
-                                }
-
-                                _taskCompletionSources.Clear();
-                            }
-                        }
-                    });
-
-                    return networkMessage.TransportMessage;
-                }
-                finally
+                transactionContext.OnDisposed(() =>
                 {
-                    Monitor.Exit(_messages);
-                }
+                    lock (_messages)
+                    {
+                        networkMessage.TransactionContext = null;
+                    }
+                });
+
+                return networkMessage.TransportMessage;
             }
-
-            return null;
         }
 
         [NotNull]
@@ -123,39 +96,6 @@ namespace Rebus.IntegrationTesting.Transport
                     .ThenBy(m => m.Id)
                     .Select(m => m.TransportMessage.Clone())
                     .ToList();
-            }
-        }
-
-        [NotNull]
-        public Task WaitUntilEmpty(CancellationToken cancellationToken = default)
-        {
-            lock (_messages)
-            {
-                if (IsQueueEmpty())
-                    return Task.CompletedTask;
-
-                var taskCompletionSource = new TaskCompletionSource<object>();
-                cancellationToken.Register(() => taskCompletionSource.TrySetCanceled());
-
-                _taskCompletionSources.Add(taskCompletionSource);
-                return taskCompletionSource.Task;
-            }
-        }
-
-        public void ResumeReceiving()
-        {
-            lock (_messages)
-            {
-                _receivingPaused = false;
-            }
-        }
-
-        private bool IsQueueEmpty()
-        {
-            lock (_messages)
-            {
-                var now = RebusTime.Now;
-                return _messages.All(m => m.VisibleAfter > now + _options.DeferralProcessingLimit);
             }
         }
 
