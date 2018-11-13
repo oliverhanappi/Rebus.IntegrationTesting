@@ -20,7 +20,7 @@ namespace Rebus.IntegrationTesting.Transport
         }
         
         [NotNull]
-        private IntegrationTestingQueue GetQueue([NotNull] string queueName)
+        public IntegrationTestingQueue GetQueue([NotNull] string queueName)
         {
             return _queues.GetOrAdd(queueName, _ => new IntegrationTestingQueue(_options));
         }

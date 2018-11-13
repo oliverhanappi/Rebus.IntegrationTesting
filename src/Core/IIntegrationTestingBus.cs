@@ -14,10 +14,10 @@ namespace Rebus.IntegrationTesting
         Task ProcessPendingMessages(CancellationToken cancellationToken = default);
         void DecreaseDeferral(TimeSpan timeSpan);
 
-        IReadOnlyList<Message> GetPendingMessages();
-        IReadOnlyList<Message> GetPublishedMessages();
-        IReadOnlyList<Message> GetRepliedMessages();
-        IReadOnlyList<Message> GetMessages(string queueName);
+        IMessages PendingMessages { get; }
+        IMessages PublishedMessages { get; }
+        IMessages RepliedMessages { get; }
+        IMessages GetMessages(string queueName);
 
         IReadOnlyCollection<ISagaData> GetSagaDatas();
         

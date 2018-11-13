@@ -17,9 +17,6 @@ namespace Rebus.IntegrationTesting.Transport
         private readonly List<IntegrationTestingNetworkMessage> _messages
             = new List<IntegrationTestingNetworkMessage>();
 
-        private readonly List<TaskCompletionSource<object>> _taskCompletionSources
-            = new List<TaskCompletionSource<object>>();
-
         public IntegrationTestingQueue([NotNull] IntegrationTestingOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));

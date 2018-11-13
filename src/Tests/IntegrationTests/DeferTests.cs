@@ -83,12 +83,12 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         {
             await _bus.Send(new Command {Value = "Hello World", Delay = 200});
 
-            var incomingCommand = (Command) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var incomingCommand = (Command) _bus.PendingMessages.Single();
             Assert.That(incomingCommand.Value, Is.EqualTo("Hello World"));
 
             await _bus.ProcessPendingMessages();
 
-            var outgoingCommand = (OutgoingCommand) _bus.GetMessages("OtherQueue").Select(m => m.Body).Single();
+            var outgoingCommand = (OutgoingCommand) _bus.GetMessages("OtherQueue").Single();
             Assert.That(outgoingCommand.Value, Is.EqualTo("HELLO WORLD Deferred"));
         }
 
@@ -97,19 +97,19 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         {
             await _bus.Send(new Command {Value = "Hello World", Delay = 5_000});
 
-            var incomingCommand = (Command) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var incomingCommand = (Command) _bus.PendingMessages.Single();
             Assert.That(incomingCommand.Value, Is.EqualTo("Hello World"));
 
             await _bus.ProcessPendingMessages();
 
-            var deferredCommand1 = (DeferredCommand) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var deferredCommand1 = (DeferredCommand) _bus.PendingMessages.Single();
             Assert.That(deferredCommand1.Value, Is.EqualTo("HELLO WORLD"));
 
             Assert.That(_bus.GetMessages("OtherQueue"), Is.Empty);
 
             await _bus.ProcessPendingMessages();
 
-            var deferredCommand2 = (DeferredCommand) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var deferredCommand2 = (DeferredCommand) _bus.PendingMessages.Single();
             Assert.That(deferredCommand2.Value, Is.EqualTo("HELLO WORLD"));
 
             Assert.That(_bus.GetMessages("OtherQueue"), Is.Empty);
@@ -117,9 +117,9 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
             _bus.DecreaseDeferral(5_000);
             await _bus.ProcessPendingMessages();
 
-            Assert.That(_bus.GetPendingMessages(), Is.Empty);
+            Assert.That(_bus.PendingMessages, Is.Empty);
 
-            var outgoingCommand = (OutgoingCommand) _bus.GetMessages("OtherQueue").Select(m => m.Body).Single();
+            var outgoingCommand = (OutgoingCommand) _bus.GetMessages("OtherQueue").Single();
             Assert.That(outgoingCommand.Value, Is.EqualTo("HELLO WORLD Deferred"));
         }
     }

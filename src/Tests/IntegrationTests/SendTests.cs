@@ -68,12 +68,12 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         {
             await _bus.Send(new IncomingCommand {Value = "Hello World"});
 
-            var incomingCommand = (IncomingCommand) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var incomingCommand = (IncomingCommand) _bus.PendingMessages.Single();
             Assert.That(incomingCommand.Value, Is.EqualTo("Hello World"));
 
             await _bus.ProcessPendingMessages();
 
-            var outgoingCommand = (OutgoingCommand) _bus.GetMessages("OtherQueue").Select(m => m.Body).Single();
+            var outgoingCommand = (OutgoingCommand) _bus.GetMessages("OtherQueue").Single();
             Assert.That(outgoingCommand.Value, Is.EqualTo("HELLO WORLD"));
         }
     }

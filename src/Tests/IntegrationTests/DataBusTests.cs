@@ -73,12 +73,12 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         {
             await _bus.Send(new StoreValueCommand {Value = "Hello World"});
 
-            var command = (StoreValueCommand) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var command = (StoreValueCommand) _bus.PendingMessages.Single();
             Assert.That(command.Value, Is.EqualTo("Hello World"));
             
             await _bus.ProcessPendingMessages();
 
-            var reply = (Reply) _bus.GetRepliedMessages().Select(m => m.Body).Single();
+            var reply = (Reply) _bus.RepliedMessages.Single();
 
             var data = _bus.DataBusData.Load(reply.AttachmentId);
             Assert.That(Encoding.UTF8.GetString(data), Is.EqualTo("Hello World"));

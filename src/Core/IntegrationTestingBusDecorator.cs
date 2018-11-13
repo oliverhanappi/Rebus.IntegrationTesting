@@ -20,7 +20,7 @@ using Rebus.Transport;
 
 namespace Rebus.IntegrationTesting
 {
-    public class IntegrationTestingBusDecorator : IIntegrationTestingBus 
+    public class IntegrationTestingBusDecorator : IIntegrationTestingBus
     {
         private readonly IBus _inner;
         private readonly IntegrationTestingOptions _integrationTestingOptions;
@@ -33,6 +33,10 @@ namespace Rebus.IntegrationTesting
 
         public IAdvancedApi Advanced => _inner.Advanced;
         public InMemDataStore DataBusData { get; }
+
+        public IMessages PendingMessages { get; }
+        public IMessages PublishedMessages { get; }
+        public IMessages RepliedMessages { get; }
 
         public IntegrationTestingBusDecorator(
             [NotNull] IBus inner,
@@ -51,9 +55,14 @@ namespace Rebus.IntegrationTesting
             _router = router ?? throw new ArgumentNullException(nameof(router));
             _log = log ?? throw new ArgumentNullException(nameof(log));
             _sagaStorage = sagaStorage ?? throw new ArgumentNullException(nameof(sagaStorage));
-            _integrationTestingOptions = integrationTestingOptions ?? throw new ArgumentNullException(nameof(integrationTestingOptions));
+            _integrationTestingOptions = integrationTestingOptions ??
+                                         throw new ArgumentNullException(nameof(integrationTestingOptions));
             _pipelineInvoker = pipelineInvoker ?? throw new ArgumentNullException(nameof(pipelineInvoker));
             DataBusData = inMemDataStore ?? throw new ArgumentNullException(nameof(inMemDataStore));
+
+            PendingMessages = GetMessages(_integrationTestingOptions.InputQueueName);
+            PublishedMessages = GetMessages(_integrationTestingOptions.SubscriberQueueName);
+            RepliedMessages = GetMessages(_integrationTestingOptions.ReplyQueueName);
         }
 
         public async Task ProcessPendingMessages(CancellationToken cancellationToken = default)
@@ -62,7 +71,8 @@ namespace Rebus.IntegrationTesting
             {
                 using (var scope = new RebusTransactionScope())
                 {
-                    var transportMessage = _network.Receive(_integrationTestingOptions.InputQueueName, scope.TransactionContext);
+                    var transportMessage = _network.Receive(_integrationTestingOptions.InputQueueName,
+                        scope.TransactionContext);
                     if (transportMessage == null)
                         break;
 
@@ -79,22 +89,12 @@ namespace Rebus.IntegrationTesting
             _network.DecreaseDeferral(_integrationTestingOptions.InputQueueName, timeSpan);
         }
 
-        public IReadOnlyList<Message> GetPendingMessages()
-            => GetMessages(_integrationTestingOptions.InputQueueName);
-
-        public IReadOnlyList<Message> GetPublishedMessages()
-            => GetMessages(_integrationTestingOptions.SubscriberQueueName);
-
-        public IReadOnlyList<Message> GetRepliedMessages()
-            => GetMessages(_integrationTestingOptions.ReplyQueueName);
-
-        public IReadOnlyList<Message> GetMessages([NotNull] string queueName)
+        public IMessages GetMessages([NotNull] string queueName)
         {
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
 
-            return _network.GetMessages(queueName)
-                .Select(m => AsyncUtility.RunSync(() => _serializer.Deserialize(m)))
-                .ToList();
+            var queue = _network.GetQueue(queueName);
+            return new MessagesQueueAdapter(queue, _serializer);
         }
 
         public IReadOnlyCollection<ISagaData> GetSagaDatas()

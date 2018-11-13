@@ -28,7 +28,7 @@ namespace Rebus.IntegrationTesting
             if (bus == null) throw new ArgumentNullException(nameof(bus));
             if (message == null) throw new ArgumentNullException(nameof(message));
 
-            if (bus.GetPendingMessages().Count > 0)
+            if (bus.PendingMessages.Count > 0)
                 throw new InvalidOperationException("There are already some messages pending.");
             
             await bus.SendLocal(message);

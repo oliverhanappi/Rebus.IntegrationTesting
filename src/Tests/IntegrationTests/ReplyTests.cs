@@ -64,12 +64,12 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         {
             await _bus.Send(new Command {Value = "Hello World"});
 
-            var command = (Command) _bus.GetPendingMessages().Select(m => m.Body).Single();
+            var command = (Command) _bus.PendingMessages.Single();
             Assert.That(command.Value, Is.EqualTo("Hello World"));
             
             await _bus.ProcessPendingMessages();
 
-            var reply = (Reply) _bus.GetRepliedMessages().Select(m => m.Body).Single();
+            var reply = (Reply) _bus.RepliedMessages.Single();
             Assert.That(reply.Value, Is.EqualTo("HELLO WORLD"));
         }
     }

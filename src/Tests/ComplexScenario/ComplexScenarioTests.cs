@@ -58,8 +58,8 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
         {
             await Execute<DocumentsProcessedReply>("Hello", "World");
 
-            var message = _bus.GetPublishedMessages().Single();
-            Assert.That(message.Body, Is.InstanceOf<DocumentProcessingExecutedEvent>());
+            var message = _bus.PublishedMessages.Single();
+            Assert.That(message, Is.InstanceOf<DocumentProcessingExecutedEvent>());
         }
 
         [Test]
@@ -73,12 +73,12 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
 
             await _bus.ProcessMessage(command);
             
-            Assert.That(_bus.GetRepliedMessages(), Is.Empty);
+            Assert.That(_bus.RepliedMessages, Is.Empty);
             
             _bus.DecreaseDeferral(TimeSpan.FromSeconds(30));
             await _bus.ProcessPendingMessages();
 
-            var reply = (DocumentProcessingFailedReply) _bus.GetRepliedMessages().Single().Body;
+            var reply = (DocumentProcessingFailedReply) _bus.RepliedMessages.Single();
             Assert.That(reply.CorrelationId, Is.EqualTo(TestCorrelationId));
             Assert.That(reply.ErrorDetails, Does.Contain("timed out"));
         }
@@ -88,12 +88,10 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
             var command = new ProcessDocumentsCommand(TestCorrelationId, contents.Select(CreateDocument).ToList());
             await _bus.ProcessMessage(command);
 
-            var repliedMessages = _bus.GetRepliedMessages();
+            Assert.That(_bus.RepliedMessages, Has.Count.EqualTo(1));
+            Assert.That(_bus.RepliedMessages[0], Is.InstanceOf<TExpectedReply>());
 
-            Assert.That(repliedMessages, Has.Count.EqualTo(1));
-            Assert.That(repliedMessages[0].Body, Is.InstanceOf<TExpectedReply>());
-
-            return (TExpectedReply) repliedMessages[0].Body;
+            return (TExpectedReply) _bus.RepliedMessages[0];
         }
 
         private string CreateDocument(string content)
