@@ -71,8 +71,7 @@ namespace Rebus.IntegrationTesting
             {
                 using (var scope = new RebusTransactionScope())
                 {
-                    var transportMessage = _network.Receive(_integrationTestingOptions.InputQueueName,
-                        scope.TransactionContext);
+                    var transportMessage = _network.Receive(_integrationTestingOptions.InputQueueName, scope.TransactionContext);
                     if (transportMessage == null)
                         break;
 

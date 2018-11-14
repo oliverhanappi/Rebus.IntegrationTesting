@@ -4,11 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Autofac;
+using NodaTime;
 using NUnit.Framework;
 using Rebus.Bus;
 using Rebus.Config;
-using Rebus.Retry.Simple;
-using Rebus.Routing.TypeBased;
 
 namespace Rebus.IntegrationTesting.Tests.ComplexScenario
 {
@@ -16,6 +15,7 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
     public class ComplexScenarioTests
     {
         private const string InputQueue = "input";
+        private const string AuditQueue = "audit";
         private const string TestCorrelationId = "corr";
 
         private IContainer _container;
@@ -25,7 +25,9 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
         public void SetUp()
         {
             var containerBuilder = new ContainerBuilder();
+            containerBuilder.RegisterInstance(SystemClock.Instance).AsImplementedInterfaces();
             containerBuilder.RegisterInstance(new DocumentProcessingOptions(TimeSpan.FromSeconds(30)));
+            containerBuilder.RegisterHandler<ProcessDocumentsCommandMonitoringHandler>();
             containerBuilder.RegisterHandler<DocumentProcessingSaga>();
             containerBuilder.RegisterHandler<AddWatermarkToDocumentCommandHandler>();
             containerBuilder.RegisterRebus(ConfigureRebus);
@@ -33,9 +35,8 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
             _container = containerBuilder.Build();
             _bus = (IIntegrationTestingBus) _container.Resolve<IBus>();
 
-            RebusConfigurer ConfigureRebus(RebusConfigurer configurer) => configurer
-                .Routing(r => r.TypeBased().Map<AddWatermarkToDocumentCommand>(InputQueue))
-                .Options(o => o.SimpleRetryStrategy(secondLevelRetriesEnabled: true))
+            RebusConfigurer ConfigureRebus(RebusConfigurer configurer) => CommonRebusConfiguration
+                .Apply(configurer, InputQueue, AuditQueue)
                 .ConfigureForIntegrationTesting(i => i.InputQueueName(InputQueue).DeferralProcessingLimit(1_000));
         }
 
@@ -54,27 +55,56 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
         }
 
         [Test]
-        public async Task PublishesExecutedEvent()
+        public async Task ReturnsFailureReplyOnErrors()
         {
-            await Execute<DocumentsProcessedReply>("Hello", "World");
+            var reply = await Execute<DocumentProcessingFailedReply>(AddWatermarkToDocumentCommandHandler.ErrorMarker);
+            Assert.That(reply.CorrelationId, Is.EqualTo(TestCorrelationId));
+            Assert.That(reply.ErrorDetails, Does.Contain(AddWatermarkToDocumentCommandHandler.ErrorMarker));
+        }
 
-            var message = _bus.PublishedMessages.Single();
-            Assert.That(message, Is.InstanceOf<DocumentProcessingExecutedEvent>());
+        [Test]
+        public async Task Success_PublishesMonitoringEvents()
+        {
+            var before = SystemClock.Instance.GetCurrentInstant();
+            await Execute("Hello", "World");
+            var after = SystemClock.Instance.GetCurrentInstant();
+
+            var messages = _bus.PublishedMessages
+                .OfType<DocumentProcessingMonitoringEvent>()
+                .OrderBy(e => e.MessageTime)
+                .ToList();
+
+            Assert.That(messages, Has.Count.EqualTo(2));
+            
+            Assert.That(messages[0].Message, Is.EqualTo("Processing of 2 documents started."));
+            Assert.That(messages[0].MessageTime, Is.InRange(before, after));
+            
+            Assert.That(messages[1].Message, Does.StartWith("Processing of 2 documents finished"));
+            Assert.That(messages[1].MessageTime, Is.InRange(before, after));
+        }
+
+        [Test]
+        public async Task Failure_PublishesMonitoringEvents()
+        {
+            await Execute(AddWatermarkToDocumentCommandHandler.ErrorMarker);
+
+            var messages = _bus.PublishedMessages
+                .OfType<DocumentProcessingMonitoringEvent>()
+                .OrderBy(e => e.MessageTime)
+                .ToList();
+
+            Assert.That(messages, Has.Count.EqualTo(2));
+            Assert.That(messages[0].Message, Is.EqualTo("Processing of 1 documents started."));
+            Assert.That(messages[1].Message, Does.StartWith("Processing of 1 documents failed"));
         }
 
         [Test]
         public async Task RepliesFailureOnTimeout()
         {
-            var command = new ProcessDocumentsCommand(TestCorrelationId, new[]
-            {
-                CreateDocument("Hello"),
-                CreateDocument(AddWatermarkToDocumentCommandHandler.NoResponseMarker)
-            });
+            await Execute("Hello", AddWatermarkToDocumentCommandHandler.NoResponseMarker);
 
-            await _bus.ProcessMessage(command);
-            
             Assert.That(_bus.RepliedMessages, Is.Empty);
-            
+
             _bus.DecreaseDeferral(TimeSpan.FromSeconds(30));
             await _bus.ProcessPendingMessages();
 
@@ -83,15 +113,33 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
             Assert.That(reply.ErrorDetails, Does.Contain("timed out"));
         }
 
+        [Test]
+        public async Task AuditsMessages()
+        {
+            await Execute("Hello", "World");
+
+            var auditMessages = _bus.GetMessages(AuditQueue);
+
+            Assert.That(auditMessages, Has.Some.InstanceOf<ProcessDocumentsCommand>());
+            Assert.That(auditMessages, Has.Some.InstanceOf<AddWatermarkToDocumentCommand>());
+            Assert.That(auditMessages, Has.Some.InstanceOf<WatermarkAddedToDocumentReply>());
+            Assert.That(auditMessages, Has.Some.InstanceOf<DocumentProcessingMonitoringEvent>());
+        }
+
         private async Task<TExpectedReply> Execute<TExpectedReply>(params string[] contents)
         {
-            var command = new ProcessDocumentsCommand(TestCorrelationId, contents.Select(CreateDocument).ToList());
-            await _bus.ProcessMessage(command);
+            await Execute(contents);
 
             Assert.That(_bus.RepliedMessages, Has.Count.EqualTo(1));
             Assert.That(_bus.RepliedMessages[0], Is.InstanceOf<TExpectedReply>());
 
             return (TExpectedReply) _bus.RepliedMessages[0];
+        }
+
+        private async Task Execute(params string[] contents)
+        {
+            var command = new ProcessDocumentsCommand(TestCorrelationId, contents.Select(CreateDocument).ToList());
+            await _bus.ProcessMessage(command);
         }
 
         private string CreateDocument(string content)

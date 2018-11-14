@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using NodaTime;
 using Rebus.Sagas;
 
 namespace Rebus.IntegrationTesting.Tests.ComplexScenario
@@ -10,6 +10,6 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
         public string ReplyAddress { get; set; }
         public IReadOnlyCollection<ProcessedDocument> Documents { get; set; }
 
-        public DateTimeOffset StartTime { get; set; }
+        public Instant StartTime { get; set; }
     }
 }

@@ -14,6 +14,7 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
         IHandleMessages<IFailed<AddWatermarkToDocumentCommand>>
     {
         public const string NoResponseMarker = "DO_NOT_RESPOND";
+        public const string ErrorMarker = "FAIL_NOW";
 
         private readonly IBus _bus;
 
@@ -35,6 +36,9 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
                 var data = await sourceReader.ReadToEndAsync();
                 if (data.Contains(NoResponseMarker))
                     return;
+                
+                if (data.Contains(ErrorMarker))
+                    throw new Exception($"Something went wrong: {data}");
 
                 await targetWriter.WriteAsync(data);
                 await targetWriter.WriteAsync("WATERMARK");

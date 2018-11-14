@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using NodaTime;
 using Rebus.Bus;
 using Rebus.Handlers;
 using Rebus.Messages;
@@ -29,14 +30,16 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
 
         private readonly IBus _bus;
         private readonly IMessageContext _messageContext;
+        private readonly IClock _clock;
         private readonly DocumentProcessingOptions _options;
 
         [UsedImplicitly]
         public DocumentProcessingSaga([NotNull] IBus bus, [NotNull] IMessageContext messageContext,
-            [NotNull] DocumentProcessingOptions options)
+            [NotNull] IClock clock, [NotNull] DocumentProcessingOptions options)
         {
             _bus = bus ?? throw new ArgumentNullException(nameof(bus));
             _messageContext = messageContext ?? throw new ArgumentNullException(nameof(messageContext));
+            _clock = clock ?? throw new ArgumentNullException(nameof(clock));
             _options = options ?? throw new ArgumentNullException(nameof(options));
         }
 
@@ -73,7 +76,7 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
             Data.CorrelationId = command.CorrelationId;
             Data.ReplyAddress = _messageContext.Headers[Headers.ReturnAddress];
             Data.Documents = processedDocuments;
-            Data.StartTime = RebusTime.Now;
+            Data.StartTime = _clock.GetCurrentInstant();
         }
 
         public async Task Handle([NotNull] WatermarkAddedToDocumentReply reply)
@@ -128,6 +131,9 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
 
                     var failedReply = new DocumentProcessingFailedReply(Data.CorrelationId, failureDetails);
                     await _bus.Advanced.Routing.Send(Data.ReplyAddress, failedReply);
+
+                    await _bus.Publish(new DocumentProcessingMonitoringEvent(
+                        _clock.GetCurrentInstant(), $"Processing of {Data.Documents.Count} documents failed."));
                 }
                 else
                 {
@@ -135,12 +141,13 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
                     var processedReply = new DocumentsProcessedReply(Data.CorrelationId, mergeResultAttachmentId);
 
                     await _bus.Advanced.Routing.Send(Data.ReplyAddress, processedReply);
+
+                    var duration = _clock.GetCurrentInstant() - Data.StartTime;
+                    var message = $"Processing of {Data.Documents.Count} documents finished " +
+                                  $"after {duration.TotalMilliseconds:n0} ms.";
+
+                    await _bus.Publish(new DocumentProcessingMonitoringEvent(_clock.GetCurrentInstant(), message));
                 }
-
-                var executedEvent = new DocumentProcessingExecutedEvent(
-                    Data.Documents.Count, RebusTime.Now - Data.StartTime, isFailed, failureDetails);
-
-                await _bus.Publish(executedEvent);
 
                 MarkAsComplete();
             }
