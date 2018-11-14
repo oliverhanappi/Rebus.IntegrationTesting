@@ -4,6 +4,7 @@
         <TargetFramework>netcoreapp2.1</TargetFramework>
         <AssemblyName>Rebus.IntegrationTesting.Tests</AssemblyName>
         <RootNamespace>Rebus.IntegrationTesting.Tests</RootNamespace>
+        <IsPackable>False</IsPackable>
     </PropertyGroup>
 
     <ItemGroup>
