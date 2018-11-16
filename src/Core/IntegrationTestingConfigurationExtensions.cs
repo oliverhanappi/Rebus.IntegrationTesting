@@ -11,6 +11,7 @@ using Rebus.IntegrationTesting.Subscriptions;
 using Rebus.IntegrationTesting.Transport;
 using Rebus.IntegrationTesting.Workers;
 using Rebus.Logging;
+using Rebus.Persistence.InMem;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
 using Rebus.Pipeline.Send;
@@ -37,6 +38,9 @@ namespace Rebus.IntegrationTesting
 
             var inMemDataStore = new InMemDataStore();
 
+            if (!integrationTestingOptions.HasCustomSubscriptionStorage)
+                rebusConfigurer = rebusConfigurer.Subscriptions(s => s.StoreInMemory());
+            
             return rebusConfigurer
                 .Options(o =>
                 {
@@ -54,7 +58,7 @@ namespace Rebus.IntegrationTesting
                     o.EnableDataBus().StoreInMemory(inMemDataStore);
                 })
                 .Transport(t => t.Register(CreateTransport))
-                .Subscriptions(s => s.Register(CreateSubscriptionStorage))
+                .Subscriptions(s => s.Decorate(CreateSubscriptionStorageDecorator))
                 .Sagas(s => s.Register(CreateSagaStorage));
         }
 
@@ -76,10 +80,11 @@ namespace Rebus.IntegrationTesting
             return new IntegrationTestingTransport(network, options.InputQueueName);
         }
 
-        private static ISubscriptionStorage CreateSubscriptionStorage(IResolutionContext resolutionContext)
+        private static ISubscriptionStorage CreateSubscriptionStorageDecorator(IResolutionContext resolutionContext)
         {
+            var subscriptionStorage = resolutionContext.Get<ISubscriptionStorage>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
-            return new IntegrationTestingSubscriptionStorage(options);
+            return new IntegrationTestingSubscriptionStorageDecorator(subscriptionStorage, options.SubscriberQueueName);
         }
 
         private static ISagaStorage CreateSagaStorage(IResolutionContext resolutionContext)

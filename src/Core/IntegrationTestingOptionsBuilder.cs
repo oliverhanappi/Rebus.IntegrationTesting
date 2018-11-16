@@ -17,7 +17,7 @@ namespace Rebus.IntegrationTesting
         private string _replyQueueName = DefaultReplyQueueName;
         private TimeSpan _deferralProcessingLimit = DefaultDeferralProcessingLimit;
         private TimeSpan _maxProcessingTime = DefaultMaxProcessingTime;
-        private int _numberOfWorkers = DefaultNumberOfWorkers;
+        private bool _hasCustomSubscriptionStorage = false;
 
         public IntegrationTestingOptionsBuilder InputQueueName([NotNull] string inputQueueName)
         {
@@ -64,15 +64,9 @@ namespace Rebus.IntegrationTesting
             return this;
         }
 
-        public IntegrationTestingOptionsBuilder NumberOfWorkers(int numberOfWorkers)
+        public IntegrationTestingOptionsBuilder HasCustomSubscriptionStorage()
         {
-            if (numberOfWorkers <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(numberOfWorkers),
-                    $"Number of workers must be greater then zero, but was {numberOfWorkers}.");
-            }
-
-            _numberOfWorkers = numberOfWorkers;
+            _hasCustomSubscriptionStorage = true;
             return this;
         }
 
@@ -97,7 +91,7 @@ namespace Rebus.IntegrationTesting
             }
 
             return new IntegrationTestingOptions(_inputQueueName, _subscriberQueueName, _replyQueueName,
-                _deferralProcessingLimit, _maxProcessingTime, _numberOfWorkers);
+                _deferralProcessingLimit, _maxProcessingTime, _hasCustomSubscriptionStorage);
         }
     }
 }
