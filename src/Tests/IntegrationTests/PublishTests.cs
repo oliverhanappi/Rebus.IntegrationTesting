@@ -104,6 +104,8 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         public async Task SendsPublishedMessagesToSelfAfterSubscribing()
         {
             await _bus.Subscribe<Event>();
+            await _bus.ProcessPendingMessages();
+            
             await _bus.ProcessMessage(new Command {Value = "Hello World"});
 
             var @event = (Event) _bus.GetMessages(ReceivedEventsQueue).Single();

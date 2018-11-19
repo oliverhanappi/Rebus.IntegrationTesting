@@ -30,8 +30,11 @@ namespace Rebus.IntegrationTesting.Transport
 
         public IntegrationTestingNetworkMessage([NotNull] TransportMessage transportMessage)
         {
+            if (transportMessage == null)
+                throw new ArgumentNullException(nameof(transportMessage));
+            
             Id = Interlocked.Increment(ref _nextId);
-            TransportMessage = transportMessage?.Clone() ?? throw new ArgumentNullException(nameof(transportMessage));
+            TransportMessage = transportMessage.Clone();
             _visibleAfter = TransportMessage.Headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilHeader)
                 ? deferredUntilHeader.ToDateTimeOffset()
                 : RebusTime.Now;

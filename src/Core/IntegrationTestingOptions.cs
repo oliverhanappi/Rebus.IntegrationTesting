@@ -1,6 +1,6 @@
 ﻿using System;
 using JetBrains.Annotations;
-using Rebus.IntegrationTesting.Transport;
+using Newtonsoft.Json;
 
 namespace Rebus.IntegrationTesting
 {
@@ -10,19 +10,21 @@ namespace Rebus.IntegrationTesting
         [NotNull] public string SubscriberQueueName { get; }
         [NotNull] public string ReplyQueueName { get; }
         public TimeSpan DeferralProcessingLimit { get; }
-        public TimeSpan MaxProcessingTime { get; }
+        public int MaxProcessedMessages { get; }
         public bool HasCustomSubscriptionStorage { get; }
+        [NotNull] public JsonSerializerSettings SerializerSettings { get; }
 
         public IntegrationTestingOptions([NotNull] string inputQueueName, [NotNull] string subscriberQueueName,
-            [NotNull] string replyQueueName, TimeSpan deferralProcessingLimit, TimeSpan maxProcessingTime,
-            bool hasCustomSubscriptionStorage)
+            [NotNull] string replyQueueName, TimeSpan deferralProcessingLimit, int maxProcessedMessages,
+            bool hasCustomSubscriptionStorage, [NotNull] JsonSerializerSettings serializerSettings)
         {
             InputQueueName = inputQueueName ?? throw new ArgumentNullException(nameof(inputQueueName));
             SubscriberQueueName = subscriberQueueName ?? throw new ArgumentNullException(nameof(subscriberQueueName));
             ReplyQueueName = replyQueueName ?? throw new ArgumentNullException(nameof(replyQueueName));
             DeferralProcessingLimit = deferralProcessingLimit;
-            MaxProcessingTime = maxProcessingTime;
+            MaxProcessedMessages = maxProcessedMessages;
             HasCustomSubscriptionStorage = hasCustomSubscriptionStorage;
+            SerializerSettings = serializerSettings ?? throw new ArgumentNullException(nameof(serializerSettings));
         }
     }
 }

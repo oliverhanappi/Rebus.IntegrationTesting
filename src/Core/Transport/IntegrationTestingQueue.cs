@@ -106,5 +106,13 @@ namespace Rebus.IntegrationTesting.Transport
                 }
             }
         }
+
+        public void Clear()
+        {
+            lock (_messages)
+            {
+                _messages.Clear();
+            }
+        }
     }
 }

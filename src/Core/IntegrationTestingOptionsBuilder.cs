@@ -1,5 +1,6 @@
 ﻿using System;
 using JetBrains.Annotations;
+using Newtonsoft.Json;
 
 namespace Rebus.IntegrationTesting
 {
@@ -9,15 +10,18 @@ namespace Rebus.IntegrationTesting
         public const string DefaultSubscriberQueueName = "SubscriberQueue";
         public const string DefaultReplyQueueName = "ReplyQueue";
         public static readonly TimeSpan DefaultDeferralProcessingLimit = TimeSpan.FromSeconds(1);
-        public static readonly TimeSpan DefaultMaxProcessingTime = TimeSpan.FromSeconds(60);
-        public const int DefaultNumberOfWorkers = 1;
+        public static readonly int DefaultMaxProcessedMessage = 100;
+
+        public static JsonSerializerSettings DefaultSerializerSettings => new JsonSerializerSettings
+            {TypeNameHandling = TypeNameHandling.Auto};
 
         private string _inputQueueName = DefaultInputQueueName;
         private string _subscriberQueueName = DefaultSubscriberQueueName;
         private string _replyQueueName = DefaultReplyQueueName;
         private TimeSpan _deferralProcessingLimit = DefaultDeferralProcessingLimit;
-        private TimeSpan _maxProcessingTime = DefaultMaxProcessingTime;
-        private bool _hasCustomSubscriptionStorage = false;
+        private int _maxProcessedMessages = DefaultMaxProcessedMessage;
+        private bool _hasCustomSubscriptionStorage;
+        private JsonSerializerSettings _serializerSettings = DefaultSerializerSettings;
 
         public IntegrationTestingOptionsBuilder InputQueueName([NotNull] string inputQueueName)
         {
@@ -52,21 +56,27 @@ namespace Rebus.IntegrationTesting
             return this;
         }
 
-        public IntegrationTestingOptionsBuilder MaxProcessingTime(TimeSpan maxProcessingTime)
+        public IntegrationTestingOptionsBuilder MaxProcessedMessages(int maxProcessedMessages)
         {
-            if (maxProcessingTime.Ticks <= 0)
+            if (maxProcessedMessages <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(maxProcessingTime),
-                    $"Max processing time must not be positive, but was {maxProcessingTime}");
+                throw new ArgumentOutOfRangeException(nameof(maxProcessedMessages),
+                    $"Max processed messages must be positive, but was {maxProcessedMessages}");
             }
 
-            _maxProcessingTime = maxProcessingTime;
+            _maxProcessedMessages = maxProcessedMessages;
             return this;
         }
 
         public IntegrationTestingOptionsBuilder HasCustomSubscriptionStorage()
         {
             _hasCustomSubscriptionStorage = true;
+            return this;
+        }
+
+        public IntegrationTestingOptionsBuilder JsonSerializerSettings([NotNull] JsonSerializerSettings serializerSettings)
+        {
+            _serializerSettings = serializerSettings ?? throw new ArgumentNullException(nameof(serializerSettings));
             return this;
         }
 
@@ -91,7 +101,7 @@ namespace Rebus.IntegrationTesting
             }
 
             return new IntegrationTestingOptions(_inputQueueName, _subscriberQueueName, _replyQueueName,
-                _deferralProcessingLimit, _maxProcessingTime, _hasCustomSubscriptionStorage);
+                _deferralProcessingLimit, _maxProcessedMessages, _hasCustomSubscriptionStorage, _serializerSettings);
         }
     }
 }

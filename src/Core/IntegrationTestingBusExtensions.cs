@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
@@ -29,9 +29,16 @@ namespace Rebus.IntegrationTesting
             if (message == null) throw new ArgumentNullException(nameof(message));
 
             if (bus.PendingMessages.Count > 0)
-                throw new InvalidOperationException("There are already some messages pending.");
+            {
+                var errorMessage = new StringBuilder();
+                errorMessage.AppendLine("There are already some messages pending:");
+                errorMessage.AppendLine();
+                errorMessage.AppendLine(bus.PendingMessages.GetMessageSummary());
+
+                throw new InvalidOperationException(errorMessage.ToString().TrimEnd());
+            }
             
-            await bus.SendLocal(message);
+            await bus.SendLocal(message, optionalHeaders);
             await bus.ProcessPendingMessages(cancellationToken);
         }
     }

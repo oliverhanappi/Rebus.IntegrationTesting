@@ -10,7 +10,6 @@ using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Subscriptions;
 using Rebus.IntegrationTesting.Transport;
 using Rebus.IntegrationTesting.Workers;
-using Rebus.Logging;
 using Rebus.Persistence.InMem;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
@@ -118,15 +117,13 @@ namespace Rebus.IntegrationTesting
             var bus = resolutionContext.Get<IBus>();
             var network = resolutionContext.Get<IntegrationTestingNetwork>();
             var serializer = resolutionContext.Get<ISerializer>();
-            var router = resolutionContext.Get<IRouter>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
-            var log = resolutionContext.Get<IRebusLoggerFactory>().GetLogger<IntegrationTestingBusDecorator>();
             var sagaStorage = (IntegrationTestingSagaStorage) resolutionContext.Get<ISagaStorage>();
             var inMemDataStore = resolutionContext.Get<InMemDataStore>();
             var pipelineInvoker = resolutionContext.Get<IPipelineInvoker>();
 
             return new IntegrationTestingBusDecorator(
-                bus, network, serializer, router, log, sagaStorage, options, inMemDataStore, pipelineInvoker);
+                bus, network, serializer, sagaStorage, options, inMemDataStore, pipelineInvoker);
         }
     }
 }

@@ -11,7 +11,6 @@ using Rebus.Handlers;
 using Rebus.Messages;
 using Rebus.Pipeline;
 using Rebus.Sagas;
-using Rebus.Time;
 
 namespace Rebus.IntegrationTesting.Tests.ComplexScenario
 {
@@ -118,7 +117,6 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
             if (Data.Documents.All(d => d.IsProcessed))
             {
                 var isFailed = Data.Documents.Any(d => d.IsFailed);
-                string failureDetails = null;
 
                 if (isFailed)
                 {
@@ -127,7 +125,7 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
                         .Select(d => $"{d.SourceAttachmentId}: {d.ErrorDetails}")
                         .ToList();
 
-                    failureDetails = String.Join(Environment.NewLine, errors);
+                    var failureDetails = String.Join(Environment.NewLine, errors);
 
                     var failedReply = new DocumentProcessingFailedReply(Data.CorrelationId, failureDetails);
                     await _bus.Advanced.Routing.Send(Data.ReplyAddress, failedReply);

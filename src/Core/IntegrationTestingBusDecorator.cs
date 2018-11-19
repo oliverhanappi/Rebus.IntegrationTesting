@@ -9,11 +9,7 @@ using Rebus.Bus.Advanced;
 using Rebus.DataBus.InMem;
 using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Transport;
-using Rebus.IntegrationTesting.Utils;
-using Rebus.Logging;
-using Rebus.Messages;
 using Rebus.Pipeline;
-using Rebus.Routing;
 using Rebus.Sagas;
 using Rebus.Serialization;
 using Rebus.Transport;
@@ -23,13 +19,12 @@ namespace Rebus.IntegrationTesting
     public class IntegrationTestingBusDecorator : IIntegrationTestingBus
     {
         private readonly IBus _inner;
-        private readonly IntegrationTestingOptions _integrationTestingOptions;
         private readonly IntegrationTestingNetwork _network;
         private readonly ISerializer _serializer;
-        private readonly IRouter _router;
-        private readonly ILog _log;
         private readonly IntegrationTestingSagaStorage _sagaStorage;
         private readonly IPipelineInvoker _pipelineInvoker;
+
+        public IntegrationTestingOptions Options { get; }
 
         public IAdvancedApi Advanced => _inner.Advanced;
         public InMemDataStore DataBusData { get; }
@@ -38,54 +33,66 @@ namespace Rebus.IntegrationTesting
         public IMessages PublishedMessages { get; }
         public IMessages RepliedMessages { get; }
 
+        private readonly MessageList _overallProcessedMessages;
+        public IMessages ProcessedMessages => _overallProcessedMessages;
+
         public IntegrationTestingBusDecorator(
             [NotNull] IBus inner,
             [NotNull] IntegrationTestingNetwork network,
             [NotNull] ISerializer serializer,
-            [NotNull] IRouter router,
-            [NotNull] ILog log,
             [NotNull] IntegrationTestingSagaStorage sagaStorage,
-            [NotNull] IntegrationTestingOptions integrationTestingOptions,
+            [NotNull] IntegrationTestingOptions options,
             [NotNull] InMemDataStore inMemDataStore,
             [NotNull] IPipelineInvoker pipelineInvoker)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _network = network ?? throw new ArgumentNullException(nameof(network));
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-            _router = router ?? throw new ArgumentNullException(nameof(router));
-            _log = log ?? throw new ArgumentNullException(nameof(log));
             _sagaStorage = sagaStorage ?? throw new ArgumentNullException(nameof(sagaStorage));
-            _integrationTestingOptions = integrationTestingOptions ??
-                                         throw new ArgumentNullException(nameof(integrationTestingOptions));
+            Options = options ?? throw new ArgumentNullException(nameof(options));
             _pipelineInvoker = pipelineInvoker ?? throw new ArgumentNullException(nameof(pipelineInvoker));
             DataBusData = inMemDataStore ?? throw new ArgumentNullException(nameof(inMemDataStore));
 
-            PendingMessages = GetMessages(_integrationTestingOptions.InputQueueName);
-            PublishedMessages = GetMessages(_integrationTestingOptions.SubscriberQueueName);
-            RepliedMessages = GetMessages(_integrationTestingOptions.ReplyQueueName);
+            PendingMessages = GetMessages(Options.InputQueueName);
+            PublishedMessages = GetMessages(Options.SubscriberQueueName);
+            RepliedMessages = GetMessages(Options.ReplyQueueName);
+            
+            _overallProcessedMessages = new MessageList(_serializer, this);
         }
 
         public async Task ProcessPendingMessages(CancellationToken cancellationToken = default)
         {
+            var currentlyProcessedMessages = new MessageList(_serializer, this);
+
             while (!cancellationToken.IsCancellationRequested)
             {
+                if (currentlyProcessedMessages.Count >= Options.MaxProcessedMessages)
+                    throw new TooManyMessagesProcessedException(currentlyProcessedMessages);
+                
                 using (var scope = new RebusTransactionScope())
                 {
-                    var transportMessage = _network.Receive(_integrationTestingOptions.InputQueueName, scope.TransactionContext);
+                    var transportMessage = _network.Receive(Options.InputQueueName, scope.TransactionContext);
                     if (transportMessage == null)
                         break;
 
+                    scope.TransactionContext.OnCompleted(async () =>
+                    {
+                        await currentlyProcessedMessages.Add(transportMessage);
+                        await _overallProcessedMessages.Add(transportMessage);
+                    });
+
                     var incomingStepContext = new IncomingStepContext(transportMessage, scope.TransactionContext);
                     await _pipelineInvoker.Invoke(incomingStepContext);
-
                     await scope.CompleteAsync();
                 }
             }
+            
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
         public void DecreaseDeferral(TimeSpan timeSpan)
         {
-            _network.DecreaseDeferral(_integrationTestingOptions.InputQueueName, timeSpan);
+            _network.DecreaseDeferral(Options.InputQueueName, timeSpan);
         }
 
         public IMessages GetMessages([NotNull] string queueName)
@@ -93,7 +100,7 @@ namespace Rebus.IntegrationTesting
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
 
             var queue = _network.GetQueue(queueName);
-            return new MessagesQueueAdapter(queue, _serializer);
+            return new MessagesQueueAdapter(queue, _serializer, this);
         }
 
         public IReadOnlyCollection<ISagaData> GetSagaDatas()

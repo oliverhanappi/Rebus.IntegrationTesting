@@ -26,13 +26,6 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
         [UsedImplicitly]
         private class CommandHandler : Saga<TestSagaData>, IAmInitiatedBy<Command>
         {
-            private readonly IBus _bus;
-
-            public CommandHandler(IBus bus)
-            {
-                _bus = bus;
-            }
-
             public async Task Handle(Command command)
             {
                 await Task.Yield();

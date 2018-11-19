@@ -16,11 +16,14 @@ namespace Rebus.IntegrationTesting
         private readonly ISerializer _serializer;
 
         public int Count => _queue.GetMessages().Count;
-
         public object this[int index] => GetMessages().Select(m => m.Body).ElementAt(index);
 
-        public MessagesQueueAdapter([NotNull] IntegrationTestingQueue queue, [NotNull] ISerializer serializer)
+        public IIntegrationTestingBus Bus { get; }
+
+        public MessagesQueueAdapter([NotNull] IntegrationTestingQueue queue, [NotNull] ISerializer serializer,
+            [NotNull] IIntegrationTestingBus bus)
         {
+            Bus = bus ?? throw new ArgumentNullException(nameof(bus));
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         }
@@ -39,6 +42,11 @@ namespace Rebus.IntegrationTesting
         public IReadOnlyList<TransportMessage> GetTransportMessages()
         {
             return _queue.GetMessages();
+        }
+
+        public void Clear()
+        {
+            _queue.Clear();
         }
     }
 }
