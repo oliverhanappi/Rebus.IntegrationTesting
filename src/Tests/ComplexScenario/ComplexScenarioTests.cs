@@ -144,11 +144,10 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
 
         private string CreateDocument(string content)
         {
-            var attachmentId = Guid.NewGuid().ToString();
-            _bus.DataBusData.Save(attachmentId, Encoding.UTF8.GetBytes(content),
+            var attachment = _bus.DataBusData.Save(Encoding.UTF8.GetBytes(content),
                 metadata: new Dictionary<string, string>());
 
-            return attachmentId;
+            return attachment.Id;
         }
 
         private void AssertDocument(string id, string expectedContent)
