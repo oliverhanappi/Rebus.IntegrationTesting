@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using JetBrains.Annotations;
 using Rebus.Messages;
 using Rebus.Transport;
@@ -25,13 +24,6 @@ namespace Rebus.IntegrationTesting.Transport
             return _queues.GetOrAdd(queueName, _ => new IntegrationTestingQueue(_options));
         }
         
-        [NotNull]
-        public IReadOnlyList<TransportMessage> GetMessages([NotNull] string queueName)
-        {
-            if (queueName == null) throw new ArgumentNullException(nameof(queueName));
-            return GetQueue(queueName).GetMessages();
-        }
-
         public void Send([NotNull] string queueName, [NotNull] TransportMessage message,
             [NotNull] ITransactionContext transactionContext)
         {
@@ -44,8 +36,7 @@ namespace Rebus.IntegrationTesting.Transport
         }
 
         [CanBeNull]
-        public TransportMessage Receive([NotNull] string queueName,
-            [NotNull] ITransactionContext transactionContext)
+        public TransportMessage Receive([NotNull] string queueName, [NotNull] ITransactionContext transactionContext)
         {
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
             if (transactionContext == null) throw new ArgumentNullException(nameof(transactionContext));
@@ -54,9 +45,10 @@ namespace Rebus.IntegrationTesting.Transport
             return queue.Receive(transactionContext);
         }
 
-        public void DecreaseDeferral(string queueName, TimeSpan timeSpan)
+        public void ShiftTime([NotNull] string queueName, TimeSpan timeSpan)
         {
-            GetQueue(queueName).DecreaseDeferral(timeSpan);
+            if (queueName == null) throw new ArgumentNullException(nameof(queueName));
+            GetQueue(queueName).ShiftTime(timeSpan);
         }
     }
 }

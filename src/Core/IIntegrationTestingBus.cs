@@ -13,7 +13,7 @@ namespace Rebus.IntegrationTesting
         IntegrationTestingOptions Options { get; }
         
         Task ProcessPendingMessages(CancellationToken cancellationToken = default);
-        void DecreaseDeferral(TimeSpan timeSpan);
+        void ShiftTime(TimeSpan timeSpan);
 
         IMessages PendingMessages { get; }
         IMessages PublishedMessages { get; }

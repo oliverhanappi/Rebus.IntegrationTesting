@@ -114,7 +114,7 @@ namespace Rebus.IntegrationTesting.Tests.IntegrationTests
 
             Assert.That(_bus.GetMessages("OtherQueue"), Is.Empty);
             
-            _bus.DecreaseDeferral(5_000);
+            _bus.ShiftTime(5_000);
             await _bus.ProcessPendingMessages();
 
             Assert.That(_bus.PendingMessages, Is.Empty);

@@ -90,9 +90,9 @@ namespace Rebus.IntegrationTesting
             cancellationToken.ThrowIfCancellationRequested();
         }
 
-        public void DecreaseDeferral(TimeSpan timeSpan)
+        public void ShiftTime(TimeSpan timeSpan)
         {
-            _network.DecreaseDeferral(Options.InputQueueName, timeSpan);
+            _network.ShiftTime(Options.InputQueueName, timeSpan);
         }
 
         public IMessages GetMessages([NotNull] string queueName)

@@ -50,6 +50,7 @@ namespace Rebus.IntegrationTesting.Transport
                 var networkMessage = _messages
                     .Where(m => m.TransactionContext == null)
                     .Where(m => m.VisibleAfter <= RebusTime.Now + _options.DeferralProcessingLimit)
+                    .Where(m => m.VisibleBefore >= RebusTime.Now)
                     .OrderBy(m => m.VisibleAfter)
                     .ThenBy(m => m.Id)
                     .FirstOrDefault();
@@ -89,6 +90,7 @@ namespace Rebus.IntegrationTesting.Transport
             {
                 return _messages
                     .Where(m => m.TransactionContext == null)
+                    .Where(m => m.VisibleBefore >= RebusTime.Now)
                     .OrderBy(m => m.VisibleAfter)
                     .ThenBy(m => m.Id)
                     .Select(m => m.TransportMessage.Clone())
@@ -96,13 +98,13 @@ namespace Rebus.IntegrationTesting.Transport
             }
         }
 
-        public void DecreaseDeferral(TimeSpan timeSpan)
+        public void ShiftTime(TimeSpan timeSpan)
         {
             lock (_messages)
             {
                 foreach (var message in _messages)
                 {
-                    message.DecreaseDeferral(timeSpan);
+                    message.ShiftTime(timeSpan);
                 }
             }
         }

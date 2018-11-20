@@ -15,10 +15,12 @@ namespace Rebus.IntegrationTesting.Transport
 
         private volatile ITransactionContext _transactionContext;
         private DateTimeOffset _visibleAfter;
+        private DateTimeOffset _visibleBefore;
 
         public int Id { get; }
 
         public DateTimeOffset VisibleAfter => _visibleAfter;
+        public DateTimeOffset VisibleBefore => _visibleBefore;
 
         public TransportMessage TransportMessage { get; }
 
@@ -38,15 +40,34 @@ namespace Rebus.IntegrationTesting.Transport
             _visibleAfter = TransportMessage.Headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilHeader)
                 ? deferredUntilHeader.ToDateTimeOffset()
                 : RebusTime.Now;
+
+            var sentTime = TransportMessage.Headers.TryGetValue(Headers.SentTime, out var sentTimeHeader)
+                ? sentTimeHeader.ToDateTimeOffset()
+                : RebusTime.Now;
+
+            var timeToBeReceived = TransportMessage.Headers.TryGetValue(Headers.TimeToBeReceived, out var timeToBeReceivedHeader)
+                ? TimeSpan.Parse(timeToBeReceivedHeader)
+                : TimeSpan.FromTicks(-1);
+
+            _visibleBefore = timeToBeReceived > TimeSpan.Zero ? sentTime + timeToBeReceived : DateTimeOffset.MaxValue;
         }
 
-        public void DecreaseDeferral(TimeSpan timeSpan)
+        public void ShiftTime(TimeSpan timeSpan)
         {
             _visibleAfter -= timeSpan;
+            _visibleBefore -= timeSpan;
 
             if (TransportMessage.Headers.ContainsKey(Headers.DeferredUntil))
             {
                 TransportMessage.Headers[Headers.DeferredUntil] = _visibleAfter.ToIso8601DateTimeOffset();
+            }
+
+            if (TransportMessage.Headers.ContainsKey(Headers.SentTime))
+            {
+                var sentTime = TransportMessage.Headers[Headers.SentTime].ToDateTimeOffset();
+                sentTime -= timeSpan;
+
+                TransportMessage.Headers[Headers.SentTime] = sentTime.ToIso8601DateTimeOffset();
             }
         }
 

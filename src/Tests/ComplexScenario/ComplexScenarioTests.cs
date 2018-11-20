@@ -105,7 +105,7 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
 
             Assert.That(_bus.RepliedMessages, Is.Empty);
 
-            _bus.DecreaseDeferral(TimeSpan.FromSeconds(30));
+            _bus.ShiftTime(TimeSpan.FromSeconds(30));
             await _bus.ProcessPendingMessages();
 
             var reply = (DocumentProcessingFailedReply) _bus.RepliedMessages.Single();
