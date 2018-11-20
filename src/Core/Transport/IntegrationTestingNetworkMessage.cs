@@ -13,7 +13,6 @@ namespace Rebus.IntegrationTesting.Transport
     {
         private static int _nextId = 1;
 
-        private volatile ITransactionContext _transactionContext;
         private DateTimeOffset _visibleAfter;
         private DateTimeOffset _visibleBefore;
 
@@ -24,11 +23,7 @@ namespace Rebus.IntegrationTesting.Transport
 
         public TransportMessage TransportMessage { get; }
 
-        public ITransactionContext TransactionContext
-        {
-            get => _transactionContext;
-            set => _transactionContext = value;
-        }
+        public ITransactionContext TransactionContext { get; set; }
 
         public IntegrationTestingNetworkMessage([NotNull] TransportMessage transportMessage)
         {

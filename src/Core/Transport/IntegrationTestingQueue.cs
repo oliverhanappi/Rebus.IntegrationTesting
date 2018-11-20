@@ -31,11 +31,7 @@ namespace Rebus.IntegrationTesting.Transport
 
             transactionContext.OnCommitted(() =>
             {
-                lock (_messages)
-                {
-                    _messages.Add(networkMessage);
-                }
-
+                _messages.Add(networkMessage);
                 return Task.CompletedTask;
             });
         }
@@ -45,76 +41,57 @@ namespace Rebus.IntegrationTesting.Transport
         {
             if (transactionContext == null) throw new ArgumentNullException(nameof(transactionContext));
 
-            lock (_messages)
+            var networkMessage = _messages
+                .Where(m => m.TransactionContext == null)
+                .Where(m => m.VisibleAfter <= RebusTime.Now + _options.DeferralProcessingLimit)
+                .Where(m => m.VisibleBefore >= RebusTime.Now)
+                .OrderBy(m => m.VisibleAfter)
+                .ThenBy(m => m.Id)
+                .FirstOrDefault();
+
+            if (networkMessage == null)
+                return null;
+
+            networkMessage.TransactionContext = transactionContext;
+
+            transactionContext.OnCommitted(() =>
             {
-                var networkMessage = _messages
-                    .Where(m => m.TransactionContext == null)
-                    .Where(m => m.VisibleAfter <= RebusTime.Now + _options.DeferralProcessingLimit)
-                    .Where(m => m.VisibleBefore >= RebusTime.Now)
-                    .OrderBy(m => m.VisibleAfter)
-                    .ThenBy(m => m.Id)
-                    .FirstOrDefault();
+                _messages.Remove(networkMessage);
+                return Task.CompletedTask;
+            });
 
-                if (networkMessage == null)
-                    return null;
+            transactionContext.OnDisposed(() =>
+            {
+                networkMessage.TransactionContext = null;
+            });
 
-                networkMessage.TransactionContext = transactionContext;
-
-                transactionContext.OnCommitted(() =>
-                {
-                    lock (_messages)
-                    {
-                        _messages.Remove(networkMessage);
-                    }
-
-                    return Task.CompletedTask;
-                });
-
-                transactionContext.OnDisposed(() =>
-                {
-                    lock (_messages)
-                    {
-                        networkMessage.TransactionContext = null;
-                    }
-                });
-
-                return networkMessage.TransportMessage;
-            }
+            return networkMessage.TransportMessage;
         }
 
         [NotNull]
         [ItemNotNull]
         public IReadOnlyList<TransportMessage> GetMessages()
         {
-            lock (_messages)
-            {
-                return _messages
-                    .Where(m => m.TransactionContext == null)
-                    .Where(m => m.VisibleBefore >= RebusTime.Now)
-                    .OrderBy(m => m.VisibleAfter)
-                    .ThenBy(m => m.Id)
-                    .Select(m => m.TransportMessage.Clone())
-                    .ToList();
-            }
+            return _messages
+                .Where(m => m.TransactionContext == null)
+                .Where(m => m.VisibleBefore >= RebusTime.Now)
+                .OrderBy(m => m.VisibleAfter)
+                .ThenBy(m => m.Id)
+                .Select(m => m.TransportMessage.Clone())
+                .ToList();
         }
 
         public void ShiftTime(TimeSpan timeSpan)
         {
-            lock (_messages)
+            foreach (var message in _messages)
             {
-                foreach (var message in _messages)
-                {
-                    message.ShiftTime(timeSpan);
-                }
+                message.ShiftTime(timeSpan);
             }
         }
 
         public void Clear()
         {
-            lock (_messages)
-            {
-                _messages.Clear();
-            }
+            _messages.Clear();
         }
     }
 }
