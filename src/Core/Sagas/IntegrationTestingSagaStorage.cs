@@ -16,7 +16,9 @@ namespace Rebus.IntegrationTesting.Sagas
 
             PropertyInfo GetInstancesProperty()
             {
-                var instancesProperty = typeof(InMemorySagaStorage).GetProperty("Instances", BindingFlags.Instance | BindingFlags.NonPublic);
+                var instancesProperty = typeof(InMemorySagaStorage).GetProperty("Instances",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                
                 if (instancesProperty == null)
                     throw new InvalidOperationException("Unable to locate Instances property on InMemorySagaStorage.");
     
