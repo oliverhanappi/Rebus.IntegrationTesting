@@ -7,8 +7,8 @@ using JetBrains.Annotations;
 using Rebus.Bus;
 using Rebus.Bus.Advanced;
 using Rebus.DataBus.InMem;
-using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Transport;
+using Rebus.Persistence.InMem;
 using Rebus.Pipeline;
 using Rebus.Sagas;
 using Rebus.Serialization;
@@ -21,7 +21,7 @@ namespace Rebus.IntegrationTesting
         private readonly IBus _inner;
         private readonly IntegrationTestingNetwork _network;
         private readonly ISerializer _serializer;
-        private readonly IntegrationTestingSagaStorage _sagaStorage;
+        private readonly InMemorySagaStorage _sagaStorage;
         private readonly IPipelineInvoker _pipelineInvoker;
 
         public IntegrationTestingOptions Options { get; }
@@ -40,7 +40,7 @@ namespace Rebus.IntegrationTesting
             [NotNull] IBus inner,
             [NotNull] IntegrationTestingNetwork network,
             [NotNull] ISerializer serializer,
-            [NotNull] IntegrationTestingSagaStorage sagaStorage,
+            [NotNull] InMemorySagaStorage sagaStorage,
             [NotNull] IntegrationTestingOptions options,
             [NotNull] InMemDataStore inMemDataStore,
             [NotNull] IPipelineInvoker pipelineInvoker)
@@ -105,7 +105,7 @@ namespace Rebus.IntegrationTesting
 
         public IReadOnlyCollection<ISagaData> GetSagaDatas()
         {
-            return _sagaStorage.SagaDatas.ToList();
+            return _sagaStorage.Instances.ToList();
         }
 
         public Task Send(object commandMessage, Dictionary<string, string> optionalHeaders = null)

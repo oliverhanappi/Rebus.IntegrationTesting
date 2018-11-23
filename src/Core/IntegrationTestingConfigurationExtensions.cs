@@ -6,7 +6,6 @@ using Rebus.DataBus;
 using Rebus.DataBus.InMem;
 using Rebus.Injection;
 using Rebus.IntegrationTesting.Routing;
-using Rebus.IntegrationTesting.Sagas;
 using Rebus.IntegrationTesting.Subscriptions;
 using Rebus.IntegrationTesting.Transport;
 using Rebus.IntegrationTesting.Workers;
@@ -88,7 +87,7 @@ namespace Rebus.IntegrationTesting
 
         private static ISagaStorage CreateSagaStorage(IResolutionContext resolutionContext)
         {
-            return new IntegrationTestingSagaStorage();
+            return new InMemorySagaStorage();
         }
 
         private static IRouter CreateRouterDecorator(IResolutionContext resolutionContext)
@@ -118,7 +117,7 @@ namespace Rebus.IntegrationTesting
             var network = resolutionContext.Get<IntegrationTestingNetwork>();
             var serializer = resolutionContext.Get<ISerializer>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
-            var sagaStorage = (IntegrationTestingSagaStorage) resolutionContext.Get<ISagaStorage>();
+            var sagaStorage = (InMemorySagaStorage) resolutionContext.Get<ISagaStorage>();
             var inMemDataStore = resolutionContext.Get<InMemDataStore>();
             var pipelineInvoker = resolutionContext.Get<IPipelineInvoker>();
 

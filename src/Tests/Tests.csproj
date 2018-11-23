@@ -15,7 +15,7 @@
       <PackageReference Include="NodaTime.Serialization.JsonNet" Version="2.0.0" />
       <PackageReference Include="NUnit" Version="3.11.0" />
       <PackageReference Include="NUnit3TestAdapter" Version="3.11.0" />
-      <PackageReference Include="Rebus" Version="5.0.1" />
+      <PackageReference Include="Rebus" Version="5.1.0" />
       <PackageReference Include="Rebus.Autofac" Version="6.0.0-b03" />
     </ItemGroup>
 
