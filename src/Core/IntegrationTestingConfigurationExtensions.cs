@@ -38,7 +38,7 @@ namespace Rebus.IntegrationTesting
             var inMemDataStore = new InMemDataStore();
 
             if (!integrationTestingOptions.HasCustomSubscriptionStorage)
-                rebusConfigurer = rebusConfigurer.Subscriptions(s => s.StoreInMemory());
+                rebusConfigurer = rebusConfigurer.Subscriptions(s => s.StoreInMemory(new InMemorySubscriberStore()));
             
             return rebusConfigurer
                 .Options(o =>
