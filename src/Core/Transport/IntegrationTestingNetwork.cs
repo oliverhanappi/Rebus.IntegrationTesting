@@ -8,20 +8,20 @@ namespace Rebus.IntegrationTesting.Transport
 {
     public class IntegrationTestingNetwork
     {
-        private readonly IntegrationTestingOptions _options;
+        private readonly TimeSpan _deferralProcessingLimit;
 
         private readonly ConcurrentDictionary<string, IntegrationTestingQueue> _queues
             = new ConcurrentDictionary<string, IntegrationTestingQueue>(StringComparer.OrdinalIgnoreCase);
 
-        public IntegrationTestingNetwork([NotNull] IntegrationTestingOptions options)
+        public IntegrationTestingNetwork(TimeSpan deferralProcessingLimit)
         {
-            _options = options ?? throw new ArgumentNullException(nameof(options));
+            _deferralProcessingLimit = deferralProcessingLimit;
         }
         
         [NotNull]
         public IntegrationTestingQueue GetQueue([NotNull] string queueName)
         {
-            return _queues.GetOrAdd(queueName, _ => new IntegrationTestingQueue(_options));
+            return _queues.GetOrAdd(queueName, _ => new IntegrationTestingQueue(_deferralProcessingLimit));
         }
         
         public void Send([NotNull] string queueName, [NotNull] TransportMessage message,

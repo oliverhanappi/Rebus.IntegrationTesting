@@ -1,6 +1,9 @@
 ﻿using System;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
+using Rebus.DataBus.InMem;
+using Rebus.IntegrationTesting.Transport;
+using Rebus.Persistence.InMem;
 
 namespace Rebus.IntegrationTesting
 {
@@ -20,8 +23,12 @@ namespace Rebus.IntegrationTesting
         private string _replyQueueName = DefaultReplyQueueName;
         private TimeSpan _deferralProcessingLimit = DefaultDeferralProcessingLimit;
         private int _maxProcessedMessages = DefaultMaxProcessedMessage;
-        private bool _hasCustomSubscriptionStorage;
         private JsonSerializerSettings _serializerSettings = DefaultSerializerSettings;
+
+        private IntegrationTestingNetwork _network;
+        private InMemDataStore _dataStore;
+        private InMemorySubscriberStore _subscriberStore;
+        private InMemorySagaStorage _sagaStorage;
 
         public IntegrationTestingOptionsBuilder InputQueueName([NotNull] string inputQueueName)
         {
@@ -68,15 +75,33 @@ namespace Rebus.IntegrationTesting
             return this;
         }
 
-        public IntegrationTestingOptionsBuilder HasCustomSubscriptionStorage()
-        {
-            _hasCustomSubscriptionStorage = true;
-            return this;
-        }
-
         public IntegrationTestingOptionsBuilder JsonSerializerSettings([NotNull] JsonSerializerSettings serializerSettings)
         {
             _serializerSettings = serializerSettings ?? throw new ArgumentNullException(nameof(serializerSettings));
+            return this;
+        }
+
+        public IntegrationTestingOptionsBuilder CustomNetwork([NotNull] IntegrationTestingNetwork network)
+        {
+            _network = network ?? throw new ArgumentNullException(nameof(network));
+            return this;
+        }
+
+        public IntegrationTestingOptionsBuilder CustomDataStore([NotNull] InMemDataStore dataStore)
+        {
+            _dataStore = dataStore ?? throw new ArgumentNullException(nameof(dataStore));
+            return this;
+        }
+
+        public IntegrationTestingOptionsBuilder CustomSubscriberStore([NotNull] InMemorySubscriberStore subscriberStore)
+        {
+            _subscriberStore = subscriberStore ?? throw new ArgumentNullException(nameof(subscriberStore));
+            return this;
+        }
+
+        public IntegrationTestingOptionsBuilder CustomSagaStorage([NotNull] InMemorySagaStorage sagaStorage)
+        {
+            _sagaStorage = sagaStorage ?? throw new ArgumentNullException(nameof(sagaStorage));
             return this;
         }
 
@@ -100,8 +125,14 @@ namespace Rebus.IntegrationTesting
                     $"Reply and subscriber queu enames must not be the same, but were both {_replyQueueName}");
             }
 
+            var network = _network ?? new IntegrationTestingNetwork(_deferralProcessingLimit);
+            var dataStore = _dataStore ?? new InMemDataStore();
+            var subscriberStore = _subscriberStore ?? new InMemorySubscriberStore();
+            var sagaStorage = _sagaStorage ?? new InMemorySagaStorage();
+
             return new IntegrationTestingOptions(_inputQueueName, _subscriberQueueName, _replyQueueName,
-                _deferralProcessingLimit, _maxProcessedMessages, _hasCustomSubscriptionStorage, _serializerSettings);
+                _deferralProcessingLimit, _maxProcessedMessages, _serializerSettings, network, dataStore,
+                subscriberStore, sagaStorage);
         }
     }
 }

@@ -32,53 +32,40 @@ namespace Rebus.IntegrationTesting
             var optionsBuilder = new IntegrationTestingOptionsBuilder();
             configure?.Invoke(optionsBuilder);
             
-            var integrationTestingOptions = optionsBuilder.Build();
+            var options = optionsBuilder.Build();
 
-            var inMemDataStore = new InMemDataStore();
-
-            if (!integrationTestingOptions.HasCustomSubscriptionStorage)
-                rebusConfigurer = rebusConfigurer.Subscriptions(s => s.StoreInMemory(new InMemorySubscriberStore()));
-            
             return rebusConfigurer
+                .Transport(t => t.Register(CreateTransport))
+                .Subscriptions(s => s.StoreInMemory(options.SubscriberStore))
+                .Subscriptions(s => s.Decorate(DecorateSubscriptionStorage))
+                .Sagas(s => s.Register(CreateSagaStorage))
                 .Options(o =>
                 {
-                    o.Register(_ => integrationTestingOptions);
-                    o.Register(_ => inMemDataStore);
-                    o.Register(CreateNetwork);
+                    o.Register(_ => options);
                     o.Register(CreateWorkerFactory);
 
                     o.Decorate(InjectPipelineSteps);
-                    o.Decorate(CreateRouterDecorator);
-                    o.Decorate(CreateBusDecorator);
+                    o.Decorate(DecorateRouter);
+                    o.Decorate(DecorateBus);
                     
                     o.SetNumberOfWorkers(0);
                     o.SetMaxParallelism(1);
-                    o.EnableDataBus().StoreInMemory(inMemDataStore);
-                })
-                .Transport(t => t.Register(CreateTransport))
-                .Subscriptions(s => s.Decorate(CreateSubscriptionStorageDecorator))
-                .Sagas(s => s.Register(CreateSagaStorage));
+                    o.EnableDataBus().StoreInMemory(options.DataStore);
+                });
         }
 
         private static IWorkerFactory CreateWorkerFactory(IResolutionContext resolutionContext)
         {
             return new NoOpWorkerFactory();
         }
-        
-        private static IntegrationTestingNetwork CreateNetwork(IResolutionContext resolutionContext)
-        {
-            var options = resolutionContext.Get<IntegrationTestingOptions>();
-            return new IntegrationTestingNetwork(options);
-        }
 
         private static ITransport CreateTransport(IResolutionContext resolutionContext)
         {
             var options = resolutionContext.Get<IntegrationTestingOptions>();
-            var network = resolutionContext.Get<IntegrationTestingNetwork>();
-            return new IntegrationTestingTransport(network, options.InputQueueName);
+            return new IntegrationTestingTransport(options.Network, options.InputQueueName);
         }
 
-        private static ISubscriptionStorage CreateSubscriptionStorageDecorator(IResolutionContext resolutionContext)
+        private static ISubscriptionStorage DecorateSubscriptionStorage(IResolutionContext resolutionContext)
         {
             var subscriptionStorage = resolutionContext.Get<ISubscriptionStorage>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
@@ -87,10 +74,11 @@ namespace Rebus.IntegrationTesting
 
         private static ISagaStorage CreateSagaStorage(IResolutionContext resolutionContext)
         {
-            return new InMemorySagaStorage();
+            var options = resolutionContext.Get<IntegrationTestingOptions>();
+            return options.SagaStorage;
         }
 
-        private static IRouter CreateRouterDecorator(IResolutionContext resolutionContext)
+        private static IRouter DecorateRouter(IResolutionContext resolutionContext)
         {
             var router = resolutionContext.Get<IRouter>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
@@ -111,18 +99,14 @@ namespace Rebus.IntegrationTesting
                 .RemoveIncomingStep(s => s is HandleDeferredMessagesStep);
         }
 
-        private static IBus CreateBusDecorator(IResolutionContext resolutionContext)
+        private static IBus DecorateBus(IResolutionContext resolutionContext)
         {
             var bus = resolutionContext.Get<IBus>();
-            var network = resolutionContext.Get<IntegrationTestingNetwork>();
             var serializer = resolutionContext.Get<ISerializer>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
-            var sagaStorage = (InMemorySagaStorage) resolutionContext.Get<ISagaStorage>();
-            var inMemDataStore = resolutionContext.Get<InMemDataStore>();
             var pipelineInvoker = resolutionContext.Get<IPipelineInvoker>();
 
-            return new IntegrationTestingBusDecorator(
-                bus, network, serializer, sagaStorage, options, inMemDataStore, pipelineInvoker);
+            return new IntegrationTestingBusDecorator(bus, serializer, options, pipelineInvoker);
         }
     }
 }

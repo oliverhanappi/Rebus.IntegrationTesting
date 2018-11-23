@@ -7,8 +7,6 @@ using JetBrains.Annotations;
 using Rebus.Bus;
 using Rebus.Bus.Advanced;
 using Rebus.DataBus.InMem;
-using Rebus.IntegrationTesting.Transport;
-using Rebus.Persistence.InMem;
 using Rebus.Pipeline;
 using Rebus.Sagas;
 using Rebus.Serialization;
@@ -19,15 +17,13 @@ namespace Rebus.IntegrationTesting
     public class IntegrationTestingBusDecorator : IIntegrationTestingBus
     {
         private readonly IBus _inner;
-        private readonly IntegrationTestingNetwork _network;
         private readonly ISerializer _serializer;
-        private readonly InMemorySagaStorage _sagaStorage;
         private readonly IPipelineInvoker _pipelineInvoker;
 
         public IntegrationTestingOptions Options { get; }
 
         public IAdvancedApi Advanced => _inner.Advanced;
-        public InMemDataStore DataBusData { get; }
+        public InMemDataStore DataBusData => Options.DataStore;
 
         public IMessages PendingMessages { get; }
         public IMessages PublishedMessages { get; }
@@ -38,20 +34,14 @@ namespace Rebus.IntegrationTesting
 
         public IntegrationTestingBusDecorator(
             [NotNull] IBus inner,
-            [NotNull] IntegrationTestingNetwork network,
             [NotNull] ISerializer serializer,
-            [NotNull] InMemorySagaStorage sagaStorage,
             [NotNull] IntegrationTestingOptions options,
-            [NotNull] InMemDataStore inMemDataStore,
             [NotNull] IPipelineInvoker pipelineInvoker)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-            _network = network ?? throw new ArgumentNullException(nameof(network));
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-            _sagaStorage = sagaStorage ?? throw new ArgumentNullException(nameof(sagaStorage));
             Options = options ?? throw new ArgumentNullException(nameof(options));
             _pipelineInvoker = pipelineInvoker ?? throw new ArgumentNullException(nameof(pipelineInvoker));
-            DataBusData = inMemDataStore ?? throw new ArgumentNullException(nameof(inMemDataStore));
 
             PendingMessages = GetMessages(Options.InputQueueName);
             PublishedMessages = GetMessages(Options.SubscriberQueueName);
@@ -71,7 +61,7 @@ namespace Rebus.IntegrationTesting
                 
                 using (var scope = new RebusTransactionScope())
                 {
-                    var transportMessage = _network.Receive(Options.InputQueueName, scope.TransactionContext);
+                    var transportMessage = Options.Network.Receive(Options.InputQueueName, scope.TransactionContext);
                     if (transportMessage == null)
                         break;
 
@@ -92,20 +82,20 @@ namespace Rebus.IntegrationTesting
 
         public void ShiftTime(TimeSpan timeSpan)
         {
-            _network.ShiftTime(Options.InputQueueName, timeSpan);
+            Options.Network.ShiftTime(Options.InputQueueName, timeSpan);
         }
 
         public IMessages GetMessages([NotNull] string queueName)
         {
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
 
-            var queue = _network.GetQueue(queueName);
+            var queue = Options.Network.GetQueue(queueName);
             return new MessagesQueueAdapter(queue, _serializer, this);
         }
 
         public IReadOnlyCollection<ISagaData> GetSagaDatas()
         {
-            return _sagaStorage.Instances.ToList();
+            return Options.SagaStorage.Instances.ToList();
         }
 
         public Task Send(object commandMessage, Dictionary<string, string> optionalHeaders = null)

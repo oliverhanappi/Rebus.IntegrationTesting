@@ -12,14 +12,14 @@ namespace Rebus.IntegrationTesting.Transport
 {
     public class IntegrationTestingQueue
     {
-        private readonly IntegrationTestingOptions _options;
+        private readonly TimeSpan _deferralProcessingLimit;
 
         private readonly List<IntegrationTestingNetworkMessage> _messages
             = new List<IntegrationTestingNetworkMessage>();
 
-        public IntegrationTestingQueue([NotNull] IntegrationTestingOptions options)
+        public IntegrationTestingQueue(TimeSpan deferralProcessingLimit)
         {
-            _options = options ?? throw new ArgumentNullException(nameof(options));
+            _deferralProcessingLimit = deferralProcessingLimit;
         }
 
         public void Send([NotNull] TransportMessage message, [NotNull] ITransactionContext transactionContext)
@@ -43,7 +43,7 @@ namespace Rebus.IntegrationTesting.Transport
 
             var networkMessage = _messages
                 .Where(m => m.TransactionContext == null)
-                .Where(m => m.VisibleAfter <= RebusTime.Now + _options.DeferralProcessingLimit)
+                .Where(m => m.VisibleAfter <= RebusTime.Now + _deferralProcessingLimit)
                 .Where(m => m.VisibleBefore >= RebusTime.Now)
                 .OrderBy(m => m.VisibleAfter)
                 .ThenBy(m => m.Id)
