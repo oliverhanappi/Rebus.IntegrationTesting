@@ -23,18 +23,6 @@ namespace Rebus.IntegrationTesting
 
         public IntegrationTestingOptions([NotNull] string inputQueueName, [NotNull] string subscriberQueueName,
             [NotNull] string replyQueueName, TimeSpan deferralProcessingLimit, int maxProcessedMessages,
-            [NotNull] JsonSerializerSettings serializerSettings)
-        {
-            InputQueueName = inputQueueName ?? throw new ArgumentNullException(nameof(inputQueueName));
-            SubscriberQueueName = subscriberQueueName ?? throw new ArgumentNullException(nameof(subscriberQueueName));
-            ReplyQueueName = replyQueueName ?? throw new ArgumentNullException(nameof(replyQueueName));
-            DeferralProcessingLimit = deferralProcessingLimit;
-            MaxProcessedMessages = maxProcessedMessages;
-            SerializerSettings = serializerSettings ?? throw new ArgumentNullException(nameof(serializerSettings));
-        }
-
-        public IntegrationTestingOptions([NotNull] string inputQueueName, [NotNull] string subscriberQueueName,
-            [NotNull] string replyQueueName, TimeSpan deferralProcessingLimit, int maxProcessedMessages,
             [NotNull] JsonSerializerSettings serializerSettings, [NotNull] IntegrationTestingNetwork network,
             [NotNull] InMemDataStore dataStore, [NotNull] InMemorySubscriberStore subscriberStore,
             [NotNull] InMemorySagaStorage sagaStorage)

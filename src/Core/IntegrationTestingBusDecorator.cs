@@ -121,6 +121,15 @@ namespace Rebus.IntegrationTesting
         public Task Unsubscribe<TEvent>() => _inner.Unsubscribe<TEvent>();
         public Task Unsubscribe(Type eventType) => _inner.Unsubscribe(eventType);
 
+        public void Reset()
+        {
+            _overallProcessedMessages.Clear();
+            Options.Network.Reset();
+            Options.DataStore.Reset();
+            Options.SubscriberStore.Reset();
+            Options.SagaStorage.Reset();
+        }
+
         public void Dispose() => _inner.Dispose();
     }
 }

@@ -24,5 +24,7 @@ namespace Rebus.IntegrationTesting
         IReadOnlyCollection<ISagaData> GetSagaDatas();
         
         InMemDataStore DataBusData { get; }
+
+        void Reset();
     }
 }

@@ -50,5 +50,13 @@ namespace Rebus.IntegrationTesting.Transport
             if (queueName == null) throw new ArgumentNullException(nameof(queueName));
             GetQueue(queueName).ShiftTime(timeSpan);
         }
+
+        public void Reset()
+        {
+            foreach (var queue in _queues.Values)
+            {
+                queue.Clear();
+            }
+        }
     }
 }
