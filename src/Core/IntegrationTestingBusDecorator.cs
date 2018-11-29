@@ -56,14 +56,14 @@ namespace Rebus.IntegrationTesting
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                if (currentlyProcessedMessages.Count >= Options.MaxProcessedMessages)
-                    throw new TooManyMessagesProcessedException(currentlyProcessedMessages);
-                
                 using (var scope = new RebusTransactionScope())
                 {
                     var transportMessage = Options.Network.Receive(Options.InputQueueName, scope.TransactionContext);
                     if (transportMessage == null)
                         break;
+
+                    if (currentlyProcessedMessages.Count >= Options.MaxProcessedMessages)
+                        throw new TooManyMessagesProcessedException(currentlyProcessedMessages);
 
                     scope.TransactionContext.OnCompleted(async () =>
                     {
