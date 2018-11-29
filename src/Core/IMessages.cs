@@ -7,6 +7,8 @@ namespace Rebus.IntegrationTesting
     {
         IIntegrationTestingBus Bus { get; }
         
+        IReadOnlyList<IReadOnlyDictionary<string, string>> Headers { get; }
+
         IReadOnlyList<Message> GetMessages();
         IReadOnlyList<TransportMessage> GetTransportMessages();
 

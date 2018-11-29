@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Rebus.Messages;
@@ -19,6 +20,9 @@ namespace Rebus.IntegrationTesting
         public object this[int index] => _messageBodies[index];
 
         public IIntegrationTestingBus Bus { get; }
+
+        public IReadOnlyList<IReadOnlyDictionary<string, string>> Headers =>
+            _messages.Select(m => (IReadOnlyDictionary<string, string>) m.Headers).ToList();
 
         public MessageList([NotNull] ISerializer serializer, [NotNull] IIntegrationTestingBus bus)
         {

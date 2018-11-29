@@ -20,6 +20,9 @@ namespace Rebus.IntegrationTesting
 
         public IIntegrationTestingBus Bus { get; }
 
+        public IReadOnlyList<IReadOnlyDictionary<string, string>> Headers =>
+            GetMessages().Select(m => (IReadOnlyDictionary<string, string>) m.Headers).ToList();
+
         public MessagesQueueAdapter([NotNull] IntegrationTestingQueue queue, [NotNull] ISerializer serializer,
             [NotNull] IIntegrationTestingBus bus)
         {
