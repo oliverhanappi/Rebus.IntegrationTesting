@@ -7,8 +7,10 @@ using Rebus.DataBus.InMem;
 using Rebus.Injection;
 using Rebus.IntegrationTesting.Routing;
 using Rebus.IntegrationTesting.Subscriptions;
+using Rebus.IntegrationTesting.Threading;
 using Rebus.IntegrationTesting.Transport;
 using Rebus.IntegrationTesting.Workers;
+using Rebus.Logging;
 using Rebus.Persistence.InMem;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
@@ -17,6 +19,7 @@ using Rebus.Routing;
 using Rebus.Sagas;
 using Rebus.Serialization;
 using Rebus.Subscriptions;
+using Rebus.Threading;
 using Rebus.Transport;
 using Rebus.Workers;
 
@@ -31,7 +34,7 @@ namespace Rebus.IntegrationTesting
 
             var optionsBuilder = new IntegrationTestingOptionsBuilder();
             configure?.Invoke(optionsBuilder);
-            
+
             var options = optionsBuilder.Build();
 
             return rebusConfigurer
@@ -44,10 +47,13 @@ namespace Rebus.IntegrationTesting
                     o.Register(_ => options);
                     o.Register(CreateWorkerFactory);
 
+                    o.Register(CreateIntegrationTestingAsyncTaskFactory);
+                    o.Register(CreateAsyncTaskFactory);
+
                     o.Decorate(InjectPipelineSteps);
                     o.Decorate(DecorateRouter);
                     o.Decorate(DecorateBus);
-                    
+
                     o.SetNumberOfWorkers(0);
                     o.SetMaxParallelism(1);
                     o.EnableDataBus().StoreInMemory(options.DataStore);
@@ -57,6 +63,19 @@ namespace Rebus.IntegrationTesting
         private static IWorkerFactory CreateWorkerFactory(IResolutionContext resolutionContext)
         {
             return new NoOpWorkerFactory();
+        }
+
+        private static IntegrationTestingAsyncTaskFactory CreateIntegrationTestingAsyncTaskFactory(
+            IResolutionContext resolutionContext)
+        {
+            var loggerFactory = resolutionContext.Get<IRebusLoggerFactory>();
+            return new IntegrationTestingAsyncTaskFactory(loggerFactory);
+        }
+
+        private static IAsyncTaskFactory CreateAsyncTaskFactory(
+            IResolutionContext resolutionContext)
+        {
+            return resolutionContext.Get<IntegrationTestingAsyncTaskFactory>();
         }
 
         private static ITransport CreateTransport(IResolutionContext resolutionContext)
@@ -82,7 +101,7 @@ namespace Rebus.IntegrationTesting
         {
             var router = resolutionContext.Get<IRouter>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
-            
+
             return new IntegrationTestingRouterDecorator(router, options.InputQueueName);
         }
 
@@ -105,8 +124,9 @@ namespace Rebus.IntegrationTesting
             var serializer = resolutionContext.Get<ISerializer>();
             var options = resolutionContext.Get<IntegrationTestingOptions>();
             var pipelineInvoker = resolutionContext.Get<IPipelineInvoker>();
+            var asyncTaskFactory = resolutionContext.Get<IntegrationTestingAsyncTaskFactory>();
 
-            return new IntegrationTestingBusDecorator(bus, serializer, options, pipelineInvoker);
+            return new IntegrationTestingBusDecorator(bus, serializer, options, pipelineInvoker, asyncTaskFactory);
         }
     }
 }

@@ -7,6 +7,7 @@ using JetBrains.Annotations;
 using Rebus.Bus;
 using Rebus.Bus.Advanced;
 using Rebus.DataBus.InMem;
+using Rebus.IntegrationTesting.Threading;
 using Rebus.Pipeline;
 using Rebus.Sagas;
 using Rebus.Serialization;
@@ -19,6 +20,7 @@ namespace Rebus.IntegrationTesting
         private readonly IBus _inner;
         private readonly ISerializer _serializer;
         private readonly IPipelineInvoker _pipelineInvoker;
+        private readonly IntegrationTestingAsyncTaskFactory _asyncTaskFactory;
 
         public IntegrationTestingOptions Options { get; }
 
@@ -36,12 +38,14 @@ namespace Rebus.IntegrationTesting
             [NotNull] IBus inner,
             [NotNull] ISerializer serializer,
             [NotNull] IntegrationTestingOptions options,
-            [NotNull] IPipelineInvoker pipelineInvoker)
+            [NotNull] IPipelineInvoker pipelineInvoker,
+            [NotNull] IntegrationTestingAsyncTaskFactory asyncTaskFactory)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             Options = options ?? throw new ArgumentNullException(nameof(options));
             _pipelineInvoker = pipelineInvoker ?? throw new ArgumentNullException(nameof(pipelineInvoker));
+            _asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
 
             PendingMessages = GetMessages(Options.InputQueueName);
             PublishedMessages = GetMessages(Options.SubscriberQueueName);
@@ -75,6 +79,8 @@ namespace Rebus.IntegrationTesting
                     await _pipelineInvoker.Invoke(incomingStepContext);
                     await scope.CompleteAsync();
                 }
+
+                await _asyncTaskFactory.ExecuteDueTasks(cancellationToken);
             }
             
             cancellationToken.ThrowIfCancellationRequested();
