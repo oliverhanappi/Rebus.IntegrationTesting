@@ -63,6 +63,15 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
         }
 
         [Test]
+        public async Task PreservesRequestId()
+        {
+            await Execute("Hello", "World");
+            
+            var requestId = _bus.RepliedMessages.Headers[0][RequestIdPipelineStep.RequestIdHeaderName];
+            Assert.That(requestId, Is.EqualTo("TestRequest"));
+        }
+
+        [Test]
         public async Task Success_PublishesMonitoringEvents()
         {
             var before = SystemClock.Instance.GetCurrentInstant();
@@ -139,7 +148,12 @@ namespace Rebus.IntegrationTesting.Tests.ComplexScenario
         private async Task Execute(params string[] contents)
         {
             var command = new ProcessDocumentsCommand(TestCorrelationId, contents.Select(CreateDocument).ToList());
-            await _bus.ProcessMessage(command);
+            await _bus.ProcessMessage(command, new Dictionary<string, string>
+            {
+                {
+                    RequestIdPipelineStep.RequestIdHeaderName, "TestRequest"
+                }
+            });
         }
 
         private string CreateDocument(string content)
